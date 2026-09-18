@@ -1,4 +1,4 @@
-import type { TypedSupabaseClient } from './index.js';
+import type { TypedSupabaseClient } from './index';
 
 export async function signUpWithEmail(
   client: TypedSupabaseClient,

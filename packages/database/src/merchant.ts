@@ -1,4 +1,14 @@
-import type { TypedSupabaseClient, Tables, Inserts } from './index.js';
+import type { TypedSupabaseClient, Tables, Inserts } from './index';
+
+function newId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
 
 export type Business = Tables<'businesses'>;
 export type BusinessMember = Tables<'business_members'>;
@@ -38,7 +48,16 @@ export async function createBusiness(
     .insert({ ...business, created_by: userData.user.id })
     .select()
     .single();
-  return { data, error };
+  if (error || !data) return { data: null, error };
+
+  const { error: memberError } = await client.from('business_members').insert({
+    business_id: data.id,
+    profile_id: userData.user.id,
+    role: 'owner',
+  });
+  if (memberError) return { data: null, error: memberError };
+
+  return { data, error: null };
 }
 
 export async function listBusinessProducts(client: TypedSupabaseClient, businessId: string) {
@@ -104,7 +123,7 @@ export async function createProduct(
     const { error: movementError } = await client.from('inventory_movements').insert({
       business_id: input.businessProduct.business_id,
       business_product_id: businessProduct.id,
-      operation_id: crypto.randomUUID(),
+      operation_id: newId(),
       movement_type: 'opening',
       quantity_delta: input.initialStock,
       resulting_quantity: input.initialStock,
@@ -150,7 +169,7 @@ export async function updateStock(
   const { error: movementError } = await client.from('inventory_movements').insert({
     business_id: input.businessId,
     business_product_id: input.businessProductId,
-    operation_id: crypto.randomUUID(),
+    operation_id: newId(),
     movement_type: input.reason,
     quantity_delta: input.delta,
     resulting_quantity: resulting,
@@ -207,7 +226,7 @@ export async function recordSale(client: TypedSupabaseClient, input: SaleInput) 
   const profileId = userData.user.id;
 
   const saleInsert: Inserts<'sales'> = {
-    id: crypto.randomUUID(),
+    id: newId(),
     business_id: input.businessId,
     device_id: input.deviceId,
     operation_id: input.operationId,
@@ -272,7 +291,7 @@ export async function recordSale(client: TypedSupabaseClient, input: SaleInput) 
       business_id: input.businessId,
       business_product_id: item.businessProductId,
       sale_id: sale.id,
-      operation_id: crypto.randomUUID(),
+      operation_id: newId(),
       movement_type: 'sale',
       quantity_delta: -item.quantity,
       resulting_quantity: resulting,

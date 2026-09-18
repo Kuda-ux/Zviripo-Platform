@@ -1,7 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
-import type { Database } from './database.types.js';
+import type { Database } from './database.types';
 
-export type { Database, Tables, Inserts, Views } from './database.types.js';
+export * from './database.types';
+export type { Session, User } from '@supabase/supabase-js';
 
 export type TypedSupabaseClient = ReturnType<typeof createClient<Database>>;
 
@@ -11,7 +12,7 @@ export function createSupabaseClient(url: string, anonymousKey: string) {
   });
 }
 
-export * from './auth.js';
-export * from './marketplace.js';
-export * from './merchant.js';
-export * from './device.js';
+export * from './auth';
+export * from './marketplace';
+export * from './merchant';
+export * from './device';

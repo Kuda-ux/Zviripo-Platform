@@ -1,49 +1,181 @@
 import { colors, radii, spacing, typography } from '@comodities/ui';
-import { useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  listBusinessProducts,
+  recordSale,
+  type BusinessProduct,
+  type Inventory,
+  type Product,
+} from '@comodities/database';
+import { router } from 'expo-router';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { Screen } from '../../src/components/screen';
-import { inventory } from '../../src/data/demo';
+import { useAuth } from '../../src/lib/auth-context';
+import { supabase } from '../../src/lib/supabase';
+
+interface SaleItem {
+  businessProduct: BusinessProduct;
+  product: Product | undefined;
+  inventory: Inventory | undefined;
+}
+
+function formatCurrency(minor: number, currency: 'USD' | 'ZWG') {
+  const amount = minor / 100;
+  return currency === 'USD' ? `$${amount.toFixed(2)}` : `Z$ ${amount.toFixed(2)}`;
+}
+
+function newId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
 
 export default function SellScreen() {
+  const { businesses, deviceId } = useAuth();
+  const business = businesses[0]?.business ?? null;
+
+  const [items, setItems] = useState<SaleItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [cart, setCart] = useState<Record<string, number>>({});
   const [query, setQuery] = useState('');
-  const [category, setCategory] = useState('Popular');
-  const visibleInventory = inventory.filter((item) =>
-    item.name.toLowerCase().includes(query.toLowerCase()),
+  const [busy, setBusy] = useState(false);
+
+  async function load() {
+    if (!business) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    const { data, error } = await listBusinessProducts(supabase, business.id);
+    if (error) {
+      setError(error.message);
+    } else {
+      setItems(
+        data.map((row) => ({
+          businessProduct: row,
+          product: row.product,
+          inventory: row.inventory,
+        })),
+      );
+    }
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [business?.id]);
+
+  const visible = items.filter((item) =>
+    (item.product?.name ?? item.businessProduct.sku ?? '')
+      .toLowerCase()
+      .includes(query.toLowerCase()),
   );
-  const itemCount = Object.values(cart).reduce((total, quantity) => total + quantity, 0);
-  const total = useMemo(
+
+  const entryCount = Object.values(cart).reduce((total, quantity) => total + quantity, 0);
+  const currency = items[0]?.businessProduct.currency_code ?? 'USD';
+  const totalMinor = useMemo(
     () =>
-      inventory.reduce((sum, item) => sum + Number(item.price.slice(1)) * (cart[item.id] ?? 0), 0),
-    [cart],
+      items.reduce(
+        (sum, item) =>
+          sum + item.businessProduct.price_minor * (cart[item.businessProduct.id] ?? 0),
+        0,
+      ),
+    [cart, items],
   );
+
   const add = (id: string) => setCart((current) => ({ ...current, [id]: (current[id] ?? 0) + 1 }));
-  const reviewSale = () =>
-    Alert.alert('Record this sale?', `${itemCount} items · $${total.toFixed(2)} · Cash`, [
-      { text: 'Keep editing', style: 'cancel' },
-      {
-        text: 'Record sale',
-        onPress: () => {
-          setCart({});
-          Alert.alert('Sale recorded', 'Stock has been updated. This sale is safe on this device.');
-        },
-      },
-    ]);
+
+  async function record() {
+    if (!business || !deviceId || entryCount === 0) return;
+    setBusy(true);
+
+    const selected = items.filter((item) => cart[item.businessProduct.id]);
+    const { error } = await recordSale(supabase, {
+      businessId: business.id,
+      deviceId,
+      operationId: newId(),
+      receiptNumber: `R-${Date.now()}`,
+      currencyCode: currency,
+      subtotalMinor: totalMinor,
+      totalMinor,
+      occurredAt: new Date().toISOString(),
+      items: selected.map((item) => ({
+        businessProductId: item.businessProduct.id,
+        productName: item.product?.name ?? item.businessProduct.sku ?? 'Item',
+        quantity: cart[item.businessProduct.id],
+        unitPriceMinor: item.businessProduct.price_minor,
+        lineTotalMinor: item.businessProduct.price_minor * cart[item.businessProduct.id],
+      })),
+      payment: { method: 'cash', amountMinor: totalMinor },
+    });
+
+    setBusy(false);
+
+    if (error) {
+      Alert.alert('Sale failed', error.message);
+      return;
+    }
+
+    setCart({});
+    await load();
+    Alert.alert('Sale recorded', 'Stock has been updated and the sale is synced.');
+  }
+
+  const reviewSale = () => {
+    Alert.alert(
+      'Record this sale?',
+      `${entryCount} items · ${formatCurrency(totalMinor, currency)} · Cash`,
+      [
+        { text: 'Keep editing', style: 'cancel' },
+        { text: 'Record sale', onPress: record },
+      ],
+    );
+  };
+
+  if (!business) {
+    return (
+      <Screen>
+        <Text style={styles.title}>Set up your business first</Text>
+        <Pressable onPress={() => router.push('/(merchant)/setup')} style={styles.checkoutButton}>
+          <Text style={styles.checkoutText}>Create business</Text>
+        </Pressable>
+      </Screen>
+    );
+  }
+
   return (
     <Screen
       footer={
         <View style={styles.checkout}>
           <View>
-            <Text style={styles.checkoutLabel}>{itemCount} items</Text>
-            <Text style={styles.checkoutTotal}>${total.toFixed(2)}</Text>
+            <Text style={styles.checkoutLabel}>{entryCount} items</Text>
+            <Text style={styles.checkoutTotal}>{formatCurrency(totalMinor, currency)}</Text>
           </View>
           <Pressable
             accessibilityRole="button"
-            disabled={!itemCount}
+            disabled={!entryCount || busy}
             onPress={reviewSale}
-            style={[styles.checkoutButton, !itemCount && styles.disabled]}
+            style={[styles.checkoutButton, (!entryCount || busy) && styles.disabled]}
           >
-            <Text style={styles.checkoutText}>Review sale</Text>
+            {busy ? (
+              <ActivityIndicator color={colors.surface} />
+            ) : (
+              <Text style={styles.checkoutText}>Review sale</Text>
+            )}
           </Pressable>
         </View>
       }
@@ -53,57 +185,70 @@ export default function SellScreen() {
           <Text style={styles.eyebrow}>NEW SALE</Text>
           <Text style={styles.title}>Sell</Text>
         </View>
-        <Text style={styles.offline}>Works offline</Text>
+        <Text style={styles.offline}>Live inventory</Text>
       </View>
       <TextInput
         accessibilityLabel="Find a product"
-        autoFocus
         placeholder="Search product or SKU"
         placeholderTextColor={colors.muted}
         value={query}
         onChangeText={setQuery}
         style={styles.search}
       />
-      <View style={styles.chips}>
-        {['Popular', 'Drinks', 'Food', 'Household'].map((item) => (
-          <Pressable
-            accessibilityRole="button"
-            key={item}
-            onPress={() => setCategory(item)}
-            style={[styles.chip, category === item && styles.activeChip]}
-          >
-            <Text style={[styles.chipText, category === item && styles.activeChipText]}>
-              {item}
-            </Text>
+      {loading ? (
+        <Text style={styles.empty}>Loading inventory…</Text>
+      ) : error ? (
+        <Text style={styles.empty}>{error}</Text>
+      ) : visible.length === 0 ? (
+        <View>
+          <Text style={styles.empty}>
+            No products yet. Add your first product to start selling.
+          </Text>
+          <Pressable onPress={() => router.push('/(merchant)/add-product')} style={styles.addCta}>
+            <Text style={styles.addCtaText}>Add a product</Text>
           </Pressable>
-        ))}
-      </View>
-      <View style={styles.products}>
-        {visibleInventory.map((item) => (
-          <Pressable
-            accessibilityRole="button"
-            key={item.id}
-            onPress={() => add(item.id)}
-            style={styles.product}
-          >
-            <View style={styles.productImage}>
-              <Text style={styles.productInitial}>{item.name[0]}</Text>
-            </View>
-            <View style={styles.productBody}>
-              <Text style={styles.productName}>{item.name}</Text>
-              <Text style={styles.stock}>{item.stock} in stock</Text>
-            </View>
-            <View style={styles.priceBlock}>
-              <Text style={styles.price}>{item.price}</Text>
-              {cart[item.id] ? (
-                <View style={styles.quantity}>
-                  <Text style={styles.quantityText}>{cart[item.id]}</Text>
+        </View>
+      ) : (
+        <View style={styles.products}>
+          {visible.map((item) => {
+            const id = item.businessProduct.id;
+            const stock = item.inventory?.quantity ?? 0;
+            return (
+              <Pressable
+                accessibilityRole="button"
+                key={id}
+                onPress={() => add(id)}
+                style={styles.product}
+              >
+                <View style={styles.productImage}>
+                  <Text style={styles.productInitial}>
+                    {(item.product?.name ?? item.businessProduct.sku ?? '?')[0]}
+                  </Text>
                 </View>
-              ) : null}
-            </View>
-          </Pressable>
-        ))}
-      </View>
+                <View style={styles.productBody}>
+                  <Text style={styles.productName}>
+                    {item.product?.name ?? item.businessProduct.sku ?? 'Unnamed'}
+                  </Text>
+                  <Text style={styles.stock}>{stock} in stock</Text>
+                </View>
+                <View style={styles.priceBlock}>
+                  <Text style={styles.price}>
+                    {formatCurrency(
+                      item.businessProduct.price_minor,
+                      item.businessProduct.currency_code,
+                    )}
+                  </Text>
+                  {cart[id] ? (
+                    <View style={styles.quantity}>
+                      <Text style={styles.quantityText}>{cart[id]}</Text>
+                    </View>
+                  ) : null}
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
     </Screen>
   );
 }
@@ -137,18 +282,16 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: typography.size.body,
   },
-  chips: { marginTop: spacing[3], flexDirection: 'row', gap: spacing[2] },
-  chip: {
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[2],
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surface,
+  empty: { marginTop: spacing[8], color: colors.muted, textAlign: 'center' },
+  addCta: {
+    minHeight: 50,
+    marginTop: spacing[4],
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radii.medium,
+    backgroundColor: colors.brand[700],
   },
-  activeChip: { borderColor: colors.brand[900], backgroundColor: colors.brand[900] },
-  chipText: { color: colors.muted, fontSize: 11, fontWeight: '800' },
-  activeChipText: { color: colors.surface },
+  addCtaText: { color: colors.surface, fontWeight: '900' },
   products: { marginTop: spacing[5], gap: spacing[3] },
   product: {
     minHeight: 78,

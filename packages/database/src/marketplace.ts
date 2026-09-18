@@ -1,4 +1,4 @@
-import type { TypedSupabaseClient, Views } from './index.js';
+import type { TypedSupabaseClient, Views } from './index';
 
 export type MarketplaceListing = Views<'marketplace_listings'>;
 

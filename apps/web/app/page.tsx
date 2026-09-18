@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { listMarketplace, type MarketplaceListing } from '@comodities/database';
-import { supabase } from '../lib/supabase';
+import { isSupabaseConfigured, supabase } from '../lib/supabase';
 
 const tones = ['green', 'gold', 'blue', 'ink'];
 
@@ -23,6 +23,14 @@ export default function Home() {
   const [error, setError] = useState('');
 
   async function loadListings(search?: string) {
+    if (!isSupabaseConfigured) {
+      setError(
+        'Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to load live listings.'
+      );
+      setListings([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError('');
     const { data, error: loadError } = await listMarketplace(supabase, {

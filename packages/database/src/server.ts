@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
-import type { Database } from './database.types.js';
+import type { Database } from './database.types';
 
-export type { Database, Tables, Inserts } from './database.types.js';
+export type { Database, Tables, Inserts } from './database.types';
 
 export type TypedSupabaseClient = ReturnType<typeof createClient<Database>>;
 

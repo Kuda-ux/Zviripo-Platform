@@ -21,6 +21,9 @@ export default function WelcomeScreen() {
           <Link href="/(merchant)" style={styles.secondary}>
             Open my business
           </Link>
+          <Link href="/(auth)/sign-in" style={styles.tertiary}>
+            Sign in
+          </Link>
         </View>
         <Text style={styles.note}>No account needed to explore</Text>
       </View>
@@ -83,6 +86,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#517365',
     borderRadius: radii.medium,
+    fontWeight: '800',
+  },
+  tertiary: {
+    minHeight: 54,
+    paddingVertical: 16,
+    color: colors.brand[100],
+    overflow: 'hidden',
+    textAlign: 'center',
     fontWeight: '800',
   },
   note: {
