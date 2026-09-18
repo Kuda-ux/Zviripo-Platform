@@ -1,13 +1,56 @@
 import { colors, radii, spacing, typography } from '@comodities/ui';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
-import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { products } from '../../src/data/demo';
+import { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { fetchMarketplaceListing, toProductPreview } from '../../src/lib/marketplace';
+import type { MarketplaceListing } from '@comodities/database';
 
 export default function ProductDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const product = products.find((item) => item.id === id) ?? products[0];
+  const [listing, setListing] = useState<MarketplaceListing | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (!id) return;
+    fetchMarketplaceListing(id).then(({ listing, error }) => {
+      setListing(listing);
+      setError(error);
+      setLoading(false);
+    });
+  }, [id]);
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.center}>
+        <ActivityIndicator size="large" color={colors.brand[700]} />
+        <Text style={styles.centerText}>Loading listing…</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (error || !listing) {
+    return (
+      <SafeAreaView style={styles.center}>
+        <Text style={styles.centerText}>{error ?? 'Listing not found'}</Text>
+        <Pressable onPress={() => router.back()} style={styles.primary}>
+          <Text style={styles.primaryText}>Go back</Text>
+        </Pressable>
+      </SafeAreaView>
+    );
+  }
+
+  const product = toProductPreview(listing);
+
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.page}>
@@ -31,21 +74,23 @@ export default function ProductDetail() {
           </View>
           <Text style={styles.title}>{product.name}</Text>
           <Text style={styles.meta}>
-            {product.area} · {product.distance}
+            {listing.category_name ?? 'General'} · {listing.business_area ?? 'Nearby'}
           </Text>
           <View style={styles.shop}>
             <View style={styles.shopMark}>
-              <Text style={styles.shopMarkText}>{product.shop[0]}</Text>
+              <Text style={styles.shopMarkText}>{listing.business_name[0]}</Text>
             </View>
             <View style={styles.shopBody}>
-              <Text style={styles.shopName}>{product.shop}</Text>
-              <Text style={styles.meta}>Verified business · Usually responds quickly</Text>
+              <Text style={styles.shopName}>{listing.business_name}</Text>
+              <Text style={styles.meta}>
+                Verified business · {listing.available_quantity} in stock
+              </Text>
             </View>
           </View>
           <Text style={styles.sectionTitle}>About this item</Text>
           <Text style={styles.description}>
-            Availability is linked to the merchant’s current shop inventory. Confirm collection
-            details with the seller.
+            {listing.product_description ??
+              'Availability is linked to the merchant’s current shop inventory. Confirm collection details with the seller.'}
           </Text>
           <Pressable onPress={() => router.push('/action/contact-seller')} style={styles.primary}>
             <Text style={styles.primaryText}>Contact seller</Text>
@@ -62,6 +107,14 @@ export default function ProductDetail() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
   page: { paddingBottom: spacing[12] },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[3],
+    backgroundColor: colors.surface,
+  },
+  centerText: { color: colors.muted, fontSize: typography.size.body },
   image: { height: 330, alignItems: 'center', justifyContent: 'center' },
   initial: { color: colors.ink, fontSize: 96, fontWeight: '900', opacity: 0.12 },
   back: {

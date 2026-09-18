@@ -1,16 +1,30 @@
 import { colors, radii, spacing, typography } from '@comodities/ui';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { ProductCard } from '../../src/components/product-card';
 import { Screen } from '../../src/components/screen';
-import { products } from '../../src/data/demo';
+import { fetchMarketplace } from '../../src/lib/marketplace';
+import type { ProductPreview } from '../../src/data/demo';
 
 export default function DiscoverScreen() {
   const [activeFilter, setActiveFilter] = useState('All');
   const [query, setQuery] = useState('');
-  const visibleProducts = products.filter((product) =>
-    `${product.name} ${product.shop} ${product.area}`.toLowerCase().includes(query.toLowerCase()),
-  );
+  const [items, setItems] = useState<ProductPreview[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  async function load(search?: string) {
+    setLoading(true);
+    const { items, error } = await fetchMarketplace(search);
+    setItems(items);
+    setError(error);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
   return (
     <Screen>
       <Text style={styles.eyebrow}>DISCOVER</Text>
@@ -21,6 +35,8 @@ export default function DiscoverScreen() {
         placeholderTextColor={colors.muted}
         value={query}
         onChangeText={setQuery}
+        onSubmitEditing={() => load(query)}
+        returnKeyType="search"
         style={styles.search}
       />
       <View style={styles.filters}>
@@ -37,11 +53,21 @@ export default function DiscoverScreen() {
           </Pressable>
         ))}
       </View>
-      <Text style={styles.resultCount}>
-        {visibleProducts.length} {activeFilter.toLowerCase()} results around Mbare
-      </Text>
+      {loading ? (
+        <Text style={styles.resultCount}>Loading live inventory…</Text>
+      ) : error ? (
+        <Text style={styles.resultCount}>{error}</Text>
+      ) : items.length === 0 ? (
+        <Text style={styles.resultCount}>
+          No public listings yet. Published stock will appear here.
+        </Text>
+      ) : (
+        <Text style={styles.resultCount}>
+          {items.length} {activeFilter.toLowerCase()} results around you
+        </Text>
+      )}
       <View style={styles.results}>
-        {visibleProducts.map((product) => (
+        {items.map((product) => (
           <ProductCard key={product.id} product={product} />
         ))}
       </View>

@@ -1,39 +1,54 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { listMarketplace, type MarketplaceListing } from '@comodities/database';
+import { supabase } from '../lib/supabase';
 
-const products = [
-  {
-    name: 'Roller meal 10kg',
-    shop: 'Mbare Value Store',
-    price: '$8.50',
-    meta: '1.2 km · In stock',
-    tone: 'green',
-  },
-  {
-    name: 'Broiler starter feed',
-    shop: 'Sunrise Agro',
-    price: '$29.00',
-    meta: '3.4 km · 12 available',
-    tone: 'gold',
-  },
-  {
-    name: 'School shoes · Size 5',
-    shop: 'Tariro Fashion',
-    price: '$18.00',
-    meta: '4.1 km · New',
-    tone: 'blue',
-  },
-];
+const tones = ['green', 'gold', 'blue', 'ink'];
+
+function formatPrice(listing: MarketplaceListing) {
+  const amount = listing.price_minor / 100;
+  if (listing.currency_code === 'USD') {
+    return `$${amount.toFixed(2)}`;
+  }
+  return `Z$ ${amount.toFixed(2)}`;
+}
 
 export default function Home() {
   const [query, setQuery] = useState('');
   const [notice, setNotice] = useState('');
   const [saved, setSaved] = useState<string[]>([]);
-  const toggleSaved = (name: string) =>
+  const [listings, setListings] = useState<MarketplaceListing[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  async function loadListings(search?: string) {
+    setLoading(true);
+    setError('');
+    const { data, error: loadError } = await listMarketplace(supabase, {
+      query: search,
+      limit: 24,
+    });
+    if (loadError) {
+      setError(loadError.message);
+      setListings([]);
+    } else {
+      setListings(data);
+    }
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    loadListings();
+  }, []);
+
+  const toggleSaved = (id: string) =>
     setSaved((items) =>
-      items.includes(name) ? items.filter((item) => item !== name) : [...items, name],
+      items.includes(id) ? items.filter((item) => item !== id) : [...items, id],
     );
+
+  const featured = listings[0];
+
   return (
     <main>
       <nav>
@@ -61,11 +76,9 @@ export default function Home() {
             className="search"
             onSubmit={(event) => {
               event.preventDefault();
-              setNotice(
-                query.trim()
-                  ? `Showing nearby matches for “${query.trim()}”`
-                  : 'Enter something to search for nearby.',
-              );
+              const term = query.trim();
+              setNotice(term ? `Searching for “${term}”…` : 'Showing all nearby listings.');
+              loadListings(term || undefined);
               document.querySelector('#nearby')?.scrollIntoView();
             }}
           >
@@ -97,15 +110,23 @@ export default function Home() {
             <span>LIVE NEAR YOU</span>
             <span className="online">● Updated</span>
           </div>
-          <div className="signal-main">
-            <small>MBARE · 1.2 KM</small>
-            <strong>Roller meal 10kg</strong>
-            <p>Mbare Value Store</p>
-            <div>
-              <b>$8.50</b>
-              <span>In stock</span>
+          {featured ? (
+            <div className="signal-main">
+              <small>{featured.business_area ?? 'NEARBY'}</small>
+              <strong>{featured.product_name}</strong>
+              <p>{featured.business_name}</p>
+              <div>
+                <b>{formatPrice(featured)}</b>
+                <span>{featured.available_quantity} in stock</span>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="signal-main">
+              <small>MARKETPLACE</small>
+              <strong>No live listings yet</strong>
+              <p>Merchants will appear here as they publish stock.</p>
+            </div>
+          )}
           <p className="signal-note">Availability updates as local shops sell and restock.</p>
         </div>
       </section>
@@ -115,10 +136,7 @@ export default function Home() {
             <p className="eyebrow">NEAR YOU</p>
             <h2>Useful things, locally available.</h2>
           </div>
-          <button
-            className="text-action"
-            onClick={() => setNotice('All available demonstration listings are shown below.')}
-          >
+          <button className="text-action" onClick={() => loadListings()}>
             View everything →
           </button>
         </div>
@@ -130,37 +148,73 @@ export default function Home() {
             </button>
           </div>
         ) : null}
-        <div className="product-grid">
-          {products.map((product) => (
-            <article className="product" key={product.name}>
-              <div className={`product-image ${product.tone}`}>
-                <span>{product.name[0]}</span>
-                <button
-                  aria-label={`${saved.includes(product.name) ? 'Remove' : 'Save'} ${product.name}`}
-                  onClick={() => toggleSaved(product.name)}
-                >
-                  {saved.includes(product.name) ? '♥' : '♡'}
-                </button>
-              </div>
-              <button
-                className="product-body"
-                onClick={() =>
-                  setNotice(
-                    `${product.name} from ${product.shop} is available for ${product.price}.`,
-                  )
-                }
-              >
-                <div>
-                  <strong>{product.price}</strong>
-                  <small>VERIFIED SHOP</small>
+        {error ? (
+          <div className="notice" role="alert">
+            {error}
+            <button aria-label="Dismiss error" onClick={() => setError('')}>
+              ×
+            </button>
+          </div>
+        ) : null}
+        {loading ? (
+          <div className="product-grid">
+            {[0, 1, 2].map((i) => (
+              <article className="product" key={i}>
+                <div className="product-image">
+                  <span>…</span>
                 </div>
-                <h3>{product.name}</h3>
-                <p>{product.shop}</p>
-                <span>{product.meta}</span>
-              </button>
-            </article>
-          ))}
-        </div>
+                <div className="product-body">
+                  <div>
+                    <strong>Loading</strong>
+                    <small>FETCHING</small>
+                  </div>
+                  <h3>Loading…</h3>
+                  <p>Fetching live inventory</p>
+                  <span>Please wait</span>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : listings.length === 0 ? (
+          <div className="notice" role="status">
+            No public marketplace listings are available yet. Merchants will appear here as they
+            publish stock.
+          </div>
+        ) : (
+          <div className="product-grid">
+            {listings.map((listing, index) => (
+              <article className="product" key={listing.listing_id}>
+                <div className={`product-image ${tones[index % tones.length]}`}>
+                  <span>{listing.product_name[0]}</span>
+                  <button
+                    aria-label={`${saved.includes(listing.listing_id) ? 'Remove' : 'Save'} ${listing.product_name}`}
+                    onClick={() => toggleSaved(listing.listing_id)}
+                  >
+                    {saved.includes(listing.listing_id) ? '♥' : '♡'}
+                  </button>
+                </div>
+                <button
+                  className="product-body"
+                  onClick={() =>
+                    setNotice(
+                      `${listing.product_name} from ${listing.business_name} is available for ${formatPrice(listing)}.`,
+                    )
+                  }
+                >
+                  <div>
+                    <strong>{formatPrice(listing)}</strong>
+                    <small>{listing.business_name}</small>
+                  </div>
+                  <h3>{listing.product_name}</h3>
+                  <p>{listing.category_name ?? 'General'}</p>
+                  <span>
+                    {listing.business_area ?? 'Nearby'} · {listing.available_quantity} in stock
+                  </span>
+                </button>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
       <section className="request-section" id="opportunities">
         <div>

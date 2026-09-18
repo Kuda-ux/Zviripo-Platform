@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@comodities/database": "workspace:*",
     "@comodities/ui": "workspace:*",
     "next": "15.5.25",
     "react": "19.1.0",

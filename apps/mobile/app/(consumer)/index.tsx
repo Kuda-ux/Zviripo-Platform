@@ -1,10 +1,12 @@
 import { colors, radii, spacing, typography } from '@comodities/ui';
 import { router } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { ScrollView, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { ProductCard } from '../../src/components/product-card';
 import { Screen } from '../../src/components/screen';
 import { SectionHeader } from '../../src/components/section-header';
-import { products } from '../../src/data/demo';
+import { fetchMarketplace } from '../../src/lib/marketplace';
+import type { ProductPreview } from '../../src/data/demo';
 
 const actions = [
   ['Buy', 'Find products nearby', '/(consumer)/discover'],
@@ -14,6 +16,16 @@ const actions = [
 ] as const;
 
 export default function ConsumerHome() {
+  const [items, setItems] = useState<ProductPreview[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchMarketplace().then(({ items }) => {
+      setItems(items);
+      setLoading(false);
+    });
+  }, []);
+
   return (
     <Screen>
       <View style={styles.header}>
@@ -59,11 +71,19 @@ export default function ConsumerHome() {
         action="See all"
         onAction={() => router.push('/(consumer)/discover')}
       />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        {products.map((product) => (
-          <ProductCard key={product.id} product={product} />
-        ))}
-      </ScrollView>
+      {loading ? (
+        <Text style={styles.opportunityDetail}>Loading live inventory…</Text>
+      ) : items.length === 0 ? (
+        <Text style={styles.opportunityDetail}>
+          No public listings yet. Published stock will appear here.
+        </Text>
+      ) : (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          {items.map((product) => (
+            <ProductCard key={product.id} product={product} />
+          ))}
+        </ScrollView>
+      )}
       <SectionHeader title="Opportunities" />
       <Pressable
         accessibilityRole="button"
