@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "Comodities",
+    "slug": "comodities",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "comodities",
+    "plugins": ["expo-router"],
+    "android": { "package": "zw.co.comodities.app" },
+    "experiments": { "typedRoutes": true }
+  }
+}
