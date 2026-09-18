@@ -106,10 +106,10 @@ pnpm format:check
 
 The monorepo contains two web apps. Create **separate Vercel projects** for each:
 
-| Project | Root Directory | Framework Preset | Build Command |
-|---------|---------------|------------------|---------------|
-| Comodities Web | `apps/web` | Next.js | default |
-| Comodities Admin | `apps/admin` | Next.js | default |
+| Project          | Root Directory | Framework Preset | Build Command |
+| ---------------- | -------------- | ---------------- | ------------- |
+| Comodities Web   | `apps/web`     | Next.js          | default       |
+| Comodities Admin | `apps/admin`   | Next.js          | default       |
 
 Each app includes a `vercel.json` with the correct framework and output settings.
 

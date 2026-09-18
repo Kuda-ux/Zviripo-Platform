@@ -10,12 +10,11 @@
         "dbaeumer.vscode-eslint",
         "esbenp.prettier-vscode",
         "bradlc.vscode-tailwindcss",
-        "ms-vscode.vscode-typescript-next"
+        "vscode.typescript-language-features"
       ],
       "settings": {
         "editor.defaultFormatter": "esbenp.prettier-vscode",
         "editor.formatOnSave": true,
-        "typescript.preferences.includePackageJsonAutoImports": "on",
         "terminal.integrated.defaultProfile.linux": "bash"
       }
     }
