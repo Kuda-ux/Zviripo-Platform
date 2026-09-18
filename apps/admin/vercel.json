@@ -1,7 +1,6 @@
 {
   "framework": "nextjs",
   "buildCommand": "cd ../.. && pnpm --filter @comodities/admin build",
-  "outputDirectory": "dist",
   "installCommand": "pnpm install --fetch-timeout 300000",
   "regions": ["iad1"]
 }
