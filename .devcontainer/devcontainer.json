@@ -1,0 +1,31 @@
+{
+  "name": "Comodities",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:1-22-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss",
+        "ms-vscode.vscode-typescript-next"
+      ],
+      "settings": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.formatOnSave": true,
+        "typescript.preferences.includePackageJsonAutoImports": "on",
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  },
+  "postCreateCommand": "npm install -g pnpm@11.25.0 && pnpm install --fetch-timeout 300000 && pnpm approve-builds sharp esbuild",
+  "postStartCommand": "pnpm build",
+  "forwardPorts": [3000, 3001, 8081],
+  "portsAttributes": {
+    "3000": { "label": "Consumer web" },
+    "3001": { "label": "Admin web" },
+    "8081": { "label": "Expo metro" }
+  }
+}

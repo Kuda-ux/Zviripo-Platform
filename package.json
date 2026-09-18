@@ -12,7 +12,11 @@
     "lint": "turbo lint",
     "test": "turbo test",
     "typecheck": "turbo typecheck",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "db:push": "supabase db push",
+    "db:test": "supabase test db",
+    "db:types": "supabase gen types typescript --linked --schema public > packages/database/src/database.types.ts",
+    "db:status": "node scripts/verify-supabase.mjs"
   },
   "devDependencies": {
     "@types/node": "22.15.3",
