@@ -3,9 +3,10 @@
 alter table public.business_products
   add column if not exists is_listed boolean not null default false;
 
--- Update the business_products manager update policy already covers all columns,
--- but we add a dedicated check so managers can list/unlist their products.
-create or replace policy business_products_update_manager
+-- Re-create the business_products manager update policy so managers can
+-- list/unlist their products. Postgres has no CREATE OR REPLACE POLICY.
+drop policy if exists business_products_update_manager on public.business_products;
+create policy business_products_update_manager
   on public.business_products
   for update
   to authenticated
