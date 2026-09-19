@@ -6,8 +6,12 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "scheme": "comodities",
-    "plugins": ["expo-router"],
-    "android": { "package": "zw.co.comodities.app" },
-    "experiments": { "typedRoutes": true }
+    "plugins": ["expo-router", "expo-sqlite"],
+    "android": {
+      "package": "zw.co.comodities.app"
+    },
+    "experiments": {
+      "typedRoutes": true
+    }
   }
 }

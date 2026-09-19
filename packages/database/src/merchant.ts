@@ -225,6 +225,13 @@ export async function recordSale(client: TypedSupabaseClient, input: SaleInput) 
 
   const profileId = userData.user.id;
 
+  const { data: existing } = await client
+    .from('sales')
+    .select('*')
+    .eq('operation_id', input.operationId)
+    .maybeSingle();
+  if (existing) return { data: existing, error: null };
+
   const saleInsert: Inserts<'sales'> = {
     id: newId(),
     business_id: input.businessId,

@@ -7,5 +7,5 @@ export const isServiceConfigured = Boolean(supabaseUrl && serviceRoleKey);
 
 export const adminSupabase = createServiceClient(
   supabaseUrl || 'https://unconfigured.supabase.local',
-  serviceRoleKey || 'unconfigured-service-key'
+  serviceRoleKey || 'unconfigured-service-key',
 );

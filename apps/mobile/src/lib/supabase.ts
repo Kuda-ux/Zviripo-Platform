@@ -7,5 +7,5 @@ export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
 export const supabase = createSupabaseClient(
   supabaseUrl || 'https://unconfigured.supabase.local',
-  supabaseAnonKey || 'unconfigured-anon-key'
+  supabaseAnonKey || 'unconfigured-anon-key',
 );

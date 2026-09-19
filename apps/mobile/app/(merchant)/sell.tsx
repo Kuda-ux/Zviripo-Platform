@@ -1,10 +1,10 @@
 import { colors, radii, spacing, typography } from '@comodities/ui';
 import {
   listBusinessProducts,
-  recordSale,
   type BusinessProduct,
   type Inventory,
   type Product,
+  type SaleInput,
 } from '@comodities/database';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import { Screen } from '../../src/components/screen';
 import { useAuth } from '../../src/lib/auth-context';
+import { pendingSaleCount, queueSale, syncPendingSales } from '../../src/lib/offline-pos';
 import { supabase } from '../../src/lib/supabase';
 
 interface SaleItem {
@@ -52,6 +53,11 @@ export default function SellScreen() {
   const [cart, setCart] = useState<Record<string, number>>({});
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState(0);
+
+  async function refreshPending() {
+    setPending(await pendingSaleCount());
+  }
 
   async function load() {
     if (!business) {
@@ -76,6 +82,7 @@ export default function SellScreen() {
 
   useEffect(() => {
     load();
+    refreshPending();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [business?.id]);
 
@@ -104,7 +111,7 @@ export default function SellScreen() {
     setBusy(true);
 
     const selected = items.filter((item) => cart[item.businessProduct.id]);
-    const { error } = await recordSale(supabase, {
+    const input: SaleInput = {
       businessId: business.id,
       deviceId,
       operationId: newId(),
@@ -121,18 +128,29 @@ export default function SellScreen() {
         lineTotalMinor: item.businessProduct.price_minor * cart[item.businessProduct.id],
       })),
       payment: { method: 'cash', amountMinor: totalMinor },
-    });
+    };
 
-    setBusy(false);
+    try {
+      await queueSale(input);
+      const result = await syncPendingSales();
 
-    if (error) {
-      Alert.alert('Sale failed', error.message);
-      return;
+      setBusy(false);
+      setCart({});
+      await load();
+      await refreshPending();
+
+      if (result.failed === 0 && result.synced > 0) {
+        Alert.alert('Sale recorded', 'Stock has been updated and the sale is synced.');
+      } else {
+        Alert.alert(
+          'Sale saved on this device',
+          'It is safe and will sync automatically when connectivity returns.',
+        );
+      }
+    } catch (queueError) {
+      setBusy(false);
+      Alert.alert('Sale failed', String(queueError));
     }
-
-    setCart({});
-    await load();
-    Alert.alert('Sale recorded', 'Stock has been updated and the sale is synced.');
   }
 
   const reviewSale = () => {
@@ -185,7 +203,18 @@ export default function SellScreen() {
           <Text style={styles.eyebrow}>NEW SALE</Text>
           <Text style={styles.title}>Sell</Text>
         </View>
-        <Text style={styles.offline}>Live inventory</Text>
+        <Pressable
+          accessibilityRole="button"
+          onPress={async () => {
+            await syncPendingSales();
+            await refreshPending();
+            await load();
+          }}
+        >
+          <Text style={[styles.offline, pending > 0 && styles.pendingPill]}>
+            {pending > 0 ? `${pending} to sync` : 'All synced'}
+          </Text>
+        </Pressable>
       </View>
       <TextInput
         accessibilityLabel="Find a product"
@@ -271,6 +300,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
   },
+  pendingPill: { color: colors.warning, backgroundColor: '#fff0d8' },
   search: {
     minHeight: 56,
     marginTop: spacing[5],

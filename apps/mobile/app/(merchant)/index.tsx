@@ -1,5 +1,5 @@
 import { colors, radii, spacing, typography } from '@comodities/ui';
-import { getSales } from '@comodities/database';
+import { getSales, listBusinessProducts } from '@comodities/database';
 import { Link, router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -8,6 +8,7 @@ import { Screen } from '../../src/components/screen';
 import { SectionHeader } from '../../src/components/section-header';
 import { SyncPill } from '../../src/components/sync-pill';
 import { useAuth } from '../../src/lib/auth-context';
+import { pendingSaleCount, syncPendingSales } from '../../src/lib/offline-pos';
 import { supabase } from '../../src/lib/supabase';
 
 function formatCurrency(minor: number, currency: 'USD' | 'ZWG' = 'USD') {
@@ -22,8 +23,13 @@ export default function MerchantDashboard() {
   const [todayTotal, setTodayTotal] = useState(0);
   const [todayCount, setTodayCount] = useState(0);
   const [itemCount, setItemCount] = useState(0);
+  const [pending, setPending] = useState(0);
+  const [lowStock, setLowStock] = useState(0);
+  const [listedCount, setListedCount] = useState(0);
 
   useEffect(() => {
+    pendingSaleCount().then(setPending);
+    syncPendingSales().then(({ pending }) => setPending(pending));
     if (!business) return;
     getSales(supabase, business.id, 100).then(({ data }) => {
       const today = new Date();
@@ -48,6 +54,14 @@ export default function MerchantDashboard() {
           0,
         ),
       );
+    });
+    listBusinessProducts(supabase, business.id).then(({ data }) => {
+      setLowStock(
+        data.filter(
+          (row) => (row.inventory?.quantity ?? 0) <= (row.inventory?.low_stock_threshold ?? 3),
+        ).length,
+      );
+      setListedCount(data.filter((row) => row.is_listed).length);
     });
   }, [business?.id]);
 
@@ -103,7 +117,7 @@ export default function MerchantDashboard() {
           <Text style={styles.greeting}>Good morning</Text>
           <Text style={styles.business}>{business!.name}</Text>
         </View>
-        <SyncPill />
+        <SyncPill pending={pending} />
       </View>
       <View style={styles.hero}>
         <Text style={styles.heroLabel}>TODAY'S BUSINESS</Text>
@@ -113,8 +127,8 @@ export default function MerchantDashboard() {
         </Text>
       </View>
       <View style={styles.metrics}>
-        <MetricCard label="Outstanding credit" value="—" detail="Coming soon" />
-        <MetricCard label="Low stock" value="—" detail="See inventory" />
+        <MetricCard label="Marketplace" value={String(listedCount)} detail="products listed" />
+        <MetricCard label="Low stock" value={String(lowStock)} detail="See inventory" />
       </View>
       <SectionHeader title="Quick actions" />
       <View style={styles.actions}>

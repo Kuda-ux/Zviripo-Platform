@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 const sections = [
   'Overview',
@@ -12,12 +12,16 @@ const sections = [
   'Sync health',
   'Audit logs',
 ];
-const metrics = [
-  ['Active merchants', '—'],
-  ['Marketplace listings', '—'],
-  ['Sales today', '—'],
-  ['Sync failures', '—'],
-];
+
+interface Stats {
+  configured: boolean;
+  error?: string | null;
+  merchants?: number;
+  listings?: number;
+  salesToday?: number;
+  syncFailures?: number;
+}
+
 const descriptions: Record<string, string> = {
   Overview:
     'Authentication, role-based access, moderation queues and privacy-safe aggregate metrics are ready for connection.',
@@ -38,6 +42,23 @@ const descriptions: Record<string, string> = {
 
 export default function AdminHome() {
   const [active, setActive] = useState('Overview');
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [statsError, setStatsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/stats')
+      .then((response) => response.json())
+      .then((data: Stats) => setStats(data))
+      .catch(() => setStatsError('Could not load platform metrics.'));
+  }, []);
+
+  const metrics: [string, string][] = [
+    ['Active merchants', stats?.configured ? String(stats.merchants ?? 0) : '—'],
+    ['Marketplace listings', stats?.configured ? String(stats.listings ?? 0) : '—'],
+    ['Sales today', stats?.configured ? String(stats.salesToday ?? 0) : '—'],
+    ['Sync failures', stats?.configured ? String(stats.syncFailures ?? 0) : '—'],
+  ];
+
   return (
     <main>
       <aside>
@@ -59,25 +80,34 @@ export default function AdminHome() {
             <small>COMMAND CENTER</small>
             <h1>{active}</h1>
           </div>
-          <span>Development environment</span>
+          <span>{stats?.configured ? 'Live data' : 'Development environment'}</span>
         </header>
         <div className="metrics">
           {metrics.map(([label, value]) => (
             <article key={label}>
               <p>{label}</p>
               <strong>{value}</strong>
-              <small>Awaiting data connection</small>
+              <small>{stats?.configured ? 'Live from Supabase' : 'Awaiting data connection'}</small>
             </article>
           ))}
         </div>
+        {statsError || stats?.error ? (
+          <div className="admin-state" role="alert">
+            <strong>Metrics error</strong>
+            <span>{statsError ?? stats?.error}</span>
+          </div>
+        ) : null}
         <div className="panel">
           <h2>{active} foundation</h2>
           <p>{descriptions[active]}</p>
           <div className="admin-state" role="status">
-            <strong>Frontend flow connected</strong>
+            <strong>
+              {stats?.configured ? 'Live metrics connected' : 'Frontend flow connected'}
+            </strong>
             <span>
-              Live data and privileged actions remain safely unavailable until admin authentication
-              and Supabase are configured.
+              {stats?.configured
+                ? 'Metrics are aggregated counts from Supabase. Privileged actions remain gated behind admin authentication.'
+                : 'Live data and privileged actions remain safely unavailable until admin authentication and Supabase are configured.'}
             </span>
           </div>
         </div>

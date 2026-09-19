@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { listMarketplace, type MarketplaceListing } from '@comodities/database';
+import { AuthLink } from '../components/auth-link';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 
 const tones = ['green', 'gold', 'blue', 'ink'];
@@ -25,7 +26,7 @@ export default function Home() {
   async function loadListings(search?: string) {
     if (!isSupabaseConfigured) {
       setError(
-        'Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to load live listings.'
+        'Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to load live listings.',
       );
       setListings([]);
       setLoading(false);
@@ -68,9 +69,7 @@ export default function Home() {
           <a href="#opportunities">Requests</a>
           <a href="#business">For business</a>
         </div>
-        <a className="nav-action" href="#business">
-          Get started
-        </a>
+        <AuthLink />
       </nav>
       <section className="hero">
         <div className="hero-copy">

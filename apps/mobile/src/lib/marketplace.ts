@@ -6,7 +6,8 @@ import {
 import { isSupabaseConfigured, supabase } from './supabase';
 import type { ProductPreview } from '../data/demo';
 
-const notConfigured = 'Supabase is not configured. Add your project URL and anon key to .env.local.';
+const notConfigured =
+  'Supabase is not configured. Add your project URL and anon key to .env.local.';
 
 const tones = ['#dff5e9', '#fff0d8', '#e5ecff', '#ffe3e0'];
 

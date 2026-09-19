@@ -1,12 +1,13 @@
 import { colors, radii, spacing } from '@comodities/ui';
 import { StyleSheet, Text, View } from 'react-native';
 
-export function SyncPill({ offline = false }: { offline?: boolean }) {
+export function SyncPill({ pending = 0 }: { pending?: number }) {
+  const offline = pending > 0;
   return (
     <View style={[styles.pill, offline && styles.offline]}>
       <View style={[styles.dot, offline && styles.offlineDot]} />
       <Text style={[styles.text, offline && styles.offlineText]}>
-        {offline ? 'Working offline' : 'Everything synced'}
+        {offline ? `${pending} to sync` : 'Everything synced'}
       </Text>
     </View>
   );
