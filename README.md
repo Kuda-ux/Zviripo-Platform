@@ -1,10 +1,10 @@
-# Comodities
+# Zviripo
 
 A Zimbabwe-first commerce operating layer that connects consumers, informal and small merchants, service providers, job seekers, farmers, and suppliers.
 
 **Core promise:** Find it. Sell it. Need it. Build with it.
 
-This repository is the home of the Comodities platform: an offline-first mobile POS and inventory engine, a universal marketplace, and a centralized admin command center.
+This repository is the home of the Zviripo platform: an offline-first mobile POS and inventory engine, a universal marketplace, and a centralized admin command center.
 
 ## Product surfaces
 
@@ -16,7 +16,7 @@ This repository is the home of the Comodities platform: an offline-first mobile 
 
 - Mobile: Expo + React Native + TypeScript
 - Web / Admin: Next.js + TypeScript
-- UI: Tailwind CSS + shared Comodities design tokens
+- UI: Tailwind CSS + shared Zviripo design tokens
 - Backend / Auth / Storage / Realtime: Supabase
 - Offline persistence: SQLite on mobile merchant flows
 - Monorepo: pnpm workspaces + Turborepo
@@ -106,10 +106,10 @@ pnpm format:check
 
 The monorepo contains two web apps. Create **separate Vercel projects** for each:
 
-| Project          | Root Directory | Framework Preset | Build Command |
-| ---------------- | -------------- | ---------------- | ------------- |
-| Comodities Web   | `apps/web`     | Next.js          | default       |
-| Comodities Admin | `apps/admin`   | Next.js          | default       |
+| Project       | Root Directory | Framework Preset | Build Command |
+| ------------- | -------------- | ---------------- | ------------- |
+| Zviripo Web   | `apps/web`     | Next.js          | default       |
+| Zviripo Admin | `apps/admin`   | Next.js          | default       |
 
 Each app includes a `vercel.json` with the correct framework and output settings.
 

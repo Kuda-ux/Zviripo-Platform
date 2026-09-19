@@ -1,8 +1,8 @@
-# Comodities Engineering Rules
+# Zviripo Engineering Rules
 
 ## Product source of truth
 
-Comodities is a Zimbabwe-first commerce operating layer connecting consumers, informal and small merchants, service providers, job seekers, farmers, and suppliers. Preserve the original dual foundation: offline-first merchant POS/inventory/credit/QR receipts, a universal marketplace, and a centralized admin portal. Present one connected ecosystem rather than separate “POS + marketplace” products.
+Zviripo is a Zimbabwe-first commerce operating layer connecting consumers, informal and small merchants, service providers, job seekers, farmers, and suppliers. Preserve the original dual foundation: offline-first merchant POS/inventory/credit/QR receipts, a universal marketplace, and a centralized admin portal. Present one connected ecosystem rather than separate “POS + marketplace” products.
 
 The core loop is inventory → marketplace publication → local discovery → sale → inventory update → aggregated insight. Prioritize proving this loop before finance, logistics, agriculture specialization, group buying, or AI.
 

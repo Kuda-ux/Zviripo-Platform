@@ -1,10 +1,13 @@
 import { colors, radii, spacing, typography } from '@comodities/ui';
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { ProductCard } from '../../src/components/product-card';
 import { Screen } from '../../src/components/screen';
 import { fetchMarketplace } from '../../src/lib/marketplace';
 import type { ProductPreview } from '../../src/data/demo';
+
+const FILTERS = ['All', 'Products', 'Shops', 'Services', 'Jobs', 'Requests'];
 
 export default function DiscoverScreen() {
   const [activeFilter, setActiveFilter] = useState('All');
@@ -25,13 +28,15 @@ export default function DiscoverScreen() {
     load();
   }, []);
 
+  const searched = query.trim().length > 0;
+
   return (
     <Screen>
       <Text style={styles.eyebrow}>DISCOVER</Text>
       <Text style={styles.title}>Find it nearby.</Text>
       <TextInput
-        accessibilityLabel="Search Comodities"
-        placeholder="Try “fridge under $150”"
+        accessibilityLabel="Search Zviripo"
+        placeholder="Products, shops, services, jobs…"
         placeholderTextColor={colors.muted}
         value={query}
         onChangeText={setQuery}
@@ -40,7 +45,7 @@ export default function DiscoverScreen() {
         style={styles.search}
       />
       <View style={styles.filters}>
-        {['All', 'Products', 'Shops', 'Services', 'Jobs'].map((filter) => (
+        {FILTERS.map((filter) => (
           <Pressable
             accessibilityRole="button"
             key={filter}
@@ -54,13 +59,21 @@ export default function DiscoverScreen() {
         ))}
       </View>
       {loading ? (
-        <Text style={styles.resultCount}>Loading live inventory…</Text>
+        <Text style={styles.resultCount}>Searching Zviripo…</Text>
       ) : error ? (
         <Text style={styles.resultCount}>{error}</Text>
       ) : items.length === 0 ? (
-        <Text style={styles.resultCount}>
-          No public listings yet. Published stock will appear here.
-        </Text>
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyTitle}>
+            {searched ? `Can’t find “${query.trim()}” nearby?` : 'Nothing nearby yet.'}
+          </Text>
+          <Text style={styles.emptyBody}>
+            Post a request — shops and providers near you can respond with what they have.
+          </Text>
+          <Pressable onPress={() => router.push('/action/request')} style={styles.emptyCta}>
+            <Text style={styles.emptyCtaText}>Post a request</Text>
+          </Pressable>
+        </View>
       ) : (
         <Text style={styles.resultCount}>
           {items.length} {activeFilter.toLowerCase()} results around you
@@ -88,9 +101,10 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: typography.size.display,
     fontWeight: '900',
+    letterSpacing: -1.2,
   },
   search: {
-    minHeight: 56,
+    minHeight: 60,
     marginTop: spacing[5],
     paddingHorizontal: spacing[4],
     borderWidth: 1,
@@ -102,7 +116,7 @@ const styles = StyleSheet.create({
   },
   filters: { marginTop: spacing[4], flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2] },
   filter: {
-    minHeight: 38,
+    minHeight: 40,
     paddingHorizontal: spacing[3],
     justifyContent: 'center',
     borderWidth: 1,
@@ -119,5 +133,24 @@ const styles = StyleSheet.create({
     fontSize: typography.size.caption,
     fontWeight: '700',
   },
+  emptyCard: {
+    marginVertical: spacing[5],
+    padding: spacing[5],
+    alignItems: 'flex-start',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.medium,
+    backgroundColor: colors.surface,
+  },
+  emptyTitle: { color: colors.ink, fontWeight: '900', fontSize: 17 },
+  emptyBody: { marginTop: spacing[1], color: colors.muted, fontSize: 13, lineHeight: 19 },
+  emptyCta: {
+    marginTop: spacing[4],
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+    borderRadius: radii.medium,
+    backgroundColor: colors.brand[700],
+  },
+  emptyCtaText: { color: colors.surface, fontWeight: '900' },
   results: { gap: spacing[4], alignItems: 'center' },
 });

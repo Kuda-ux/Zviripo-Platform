@@ -57,7 +57,7 @@ export default function SignInScreen() {
         <Pressable onPress={() => router.back()} style={styles.back}>
           <Text style={styles.backText}>‹ Back</Text>
         </Pressable>
-        <Text style={styles.eyebrow}>COMODITIES</Text>
+        <Text style={styles.eyebrow}>ZVIRIPO</Text>
         <Text style={styles.title}>
           {mode === 'sign-in' ? 'Welcome back.' : 'Create your account.'}
         </Text>

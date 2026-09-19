@@ -1,21 +1,26 @@
 export const colors = {
   brand: {
-    50: '#ecfdf5',
-    100: '#d1fae5',
-    500: '#10b981',
-    600: '#059669',
-    700: '#047857',
-    900: '#064e3b',
+    50: '#eef6f1',
+    100: '#d9ecdf',
+    500: '#178d5f',
+    600: '#0f7a51',
+    700: '#0d5f40',
+    900: '#0a3527',
   },
-  ink: '#13231b',
-  muted: '#5f6f66',
-  canvas: '#f7f9f7',
+  accent: {
+    100: '#fbeed3',
+    500: '#e8a020',
+    700: '#b77708',
+  },
+  ink: '#101d16',
+  muted: '#54675c',
+  canvas: '#f5f4ef',
   surface: '#ffffff',
-  border: '#dfe7e2',
-  success: '#087a4b',
-  warning: '#a15c00',
-  danger: '#b42318',
-  info: '#175cd3',
+  border: '#e2e5dc',
+  success: '#0f7a51',
+  warning: '#b77708',
+  danger: '#c03b2b',
+  info: '#2f5fa3',
 } as const;
 
 export const spacing = {
@@ -32,12 +37,12 @@ export const spacing = {
   16: 64,
 } as const;
 
-export const radii = { small: 8, medium: 12, large: 18, pill: 999 } as const;
+export const radii = { small: 8, medium: 14, large: 22, pill: 999 } as const;
 
 export const typography = {
   family: { sans: 'System', mono: 'monospace' },
-  size: { caption: 12, body: 16, title: 22, display: 32 },
-  lineHeight: { caption: 16, body: 24, title: 28, display: 40 },
+  size: { caption: 12, body: 16, title: 22, display: 34 },
+  lineHeight: { caption: 16, body: 24, title: 28, display: 42 },
 } as const;
 
 export const touchTarget = { minimum: 48 } as const;

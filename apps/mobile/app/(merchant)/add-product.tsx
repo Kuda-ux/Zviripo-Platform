@@ -198,7 +198,7 @@ export default function AddProductScreen() {
             <View style={[styles.toggle, listed && styles.toggleActive]}>
               <Text style={styles.toggleMark}>{listed ? '✓' : ''}</Text>
             </View>
-            <Text style={styles.toggleText}>List on Comodities marketplace</Text>
+            <Text style={styles.toggleText}>List on Zviripo marketplace</Text>
           </Pressable>
 
           {error ? <Text style={styles.error}>{error}</Text> : null}

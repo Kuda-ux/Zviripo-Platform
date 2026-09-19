@@ -26,6 +26,7 @@ export default function MerchantDashboard() {
   const [pending, setPending] = useState(0);
   const [lowStock, setLowStock] = useState(0);
   const [listedCount, setListedCount] = useState(0);
+  const [lowItems, setLowItems] = useState<string[]>([]);
 
   useEffect(() => {
     pendingSaleCount().then(setPending);
@@ -56,11 +57,11 @@ export default function MerchantDashboard() {
       );
     });
     listBusinessProducts(supabase, business.id).then(({ data }) => {
-      setLowStock(
-        data.filter(
-          (row) => (row.inventory?.quantity ?? 0) <= (row.inventory?.low_stock_threshold ?? 3),
-        ).length,
+      const low = data.filter(
+        (row) => (row.inventory?.quantity ?? 0) <= (row.inventory?.low_stock_threshold ?? 3),
       );
+      setLowStock(low.length);
+      setLowItems(low.map((row) => row.product?.name ?? row.sku ?? 'Unnamed product').slice(0, 3));
       setListedCount(data.filter((row) => row.is_listed).length);
     });
   }, [business?.id]);
@@ -150,23 +151,70 @@ export default function MerchantDashboard() {
           </Pressable>
         ))}
       </View>
-      <SectionHeader
-        title="Insights"
-        action="View all"
-        onAction={() => router.push('/action/insights')}
-      />
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => router.push('/(merchant)/inventory')}
-        style={styles.insight}
-      >
-        <View>
-          <Text style={styles.insightLabel}>MARKETPLACE</Text>
-          <Text style={styles.insightTitle}>Publish stock to reach nearby buyers</Text>
-          <Text style={styles.insightDetail}>Toggle “List on Comodities” in inventory</Text>
+      <SectionHeader title="Attention" />
+      {pending > 0 ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={async () => {
+            const { pending } = await syncPendingSales();
+            setPending(pending);
+          }}
+          style={styles.insight}
+        >
+          <View>
+            <Text style={styles.insightLabel}>SYNC</Text>
+            <Text style={styles.insightTitle}>
+              {pending} {pending === 1 ? 'sale' : 'sales'} saved safely on this device
+            </Text>
+            <Text style={styles.insightDetail}>Tap to sync now</Text>
+          </View>
+          <Text style={styles.arrow}>›</Text>
+        </Pressable>
+      ) : null}
+      {lowItems.length > 0 ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push('/(merchant)/inventory')}
+          style={styles.insight}
+        >
+          <View>
+            <Text style={styles.insightLabel}>RESTOCK SOON</Text>
+            <Text style={styles.insightTitle}>
+              {lowItems[0]}
+              {lowItems.length > 1 ? ` and ${lowItems.length - 1} more` : ''} running low
+            </Text>
+            <Text style={styles.insightDetail}>Review stock levels in inventory</Text>
+          </View>
+          <Text style={styles.arrow}>›</Text>
+        </Pressable>
+      ) : null}
+      {listedCount === 0 ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push('/(merchant)/inventory')}
+          style={styles.insight}
+        >
+          <View>
+            <Text style={styles.insightLabel}>MARKETPLACE</Text>
+            <Text style={styles.insightTitle}>Nothing is visible to buyers yet</Text>
+            <Text style={styles.insightDetail}>
+              Turn on “List on Zviripo” for a product to appear in search
+            </Text>
+          </View>
+          <Text style={styles.arrow}>›</Text>
+        </Pressable>
+      ) : null}
+      {pending === 0 && lowItems.length === 0 && listedCount > 0 ? (
+        <View style={styles.insight}>
+          <View>
+            <Text style={styles.insightLabel}>ALL CLEAR</Text>
+            <Text style={styles.insightTitle}>Your business is up to date</Text>
+            <Text style={styles.insightDetail}>
+              {listedCount} {listedCount === 1 ? 'product' : 'products'} live on Zviripo
+            </Text>
+          </View>
         </View>
-        <Text style={styles.arrow}>›</Text>
-      </Pressable>
+      ) : null}
     </Screen>
   );
 }
@@ -222,7 +270,7 @@ const styles = StyleSheet.create({
     color: colors.brand[900],
     textAlign: 'center',
     borderRadius: radii.medium,
-    backgroundColor: colors.brand[500],
+    backgroundColor: colors.accent[500],
     fontWeight: '900',
     fontSize: 17,
   },

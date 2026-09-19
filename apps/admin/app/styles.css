@@ -1,6 +1,6 @@
 :root {
-  color: #13231b;
-  background: #f4f7f5;
+  color: #101d16;
+  background: #f5f4ef;
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
 }
 * {
@@ -17,13 +17,13 @@ main {
 aside {
   padding: 30px 20px;
   color: #fff;
-  background: #102d22;
+  background: #0a3527;
 }
 aside strong {
   font-size: 1.3rem;
 }
 aside p {
-  color: #9cc5b2;
+  color: #8fb3a2;
   margin: 4px 0 28px;
 }
 aside button {
@@ -31,7 +31,7 @@ aside button {
   min-height: 44px;
   padding: 0 12px;
   text-align: left;
-  color: #cde4d8;
+  color: #b5cfc3;
   border: 0;
   border-radius: 9px;
   background: transparent;
@@ -39,7 +39,7 @@ aside button {
 }
 aside button.active {
   color: #fff;
-  background: #1c4937;
+  background: #14503c;
 }
 section {
   padding: 40px;
@@ -51,9 +51,9 @@ header {
 }
 header span {
   padding: 8px 12px;
-  color: #047857;
+  color: #0d5f40;
   border-radius: 999px;
-  background: #d1fae5;
+  background: #d9ecdf;
   font-size: 0.8rem;
   font-weight: 700;
 }
@@ -62,7 +62,7 @@ h1 {
   font-size: 2.3rem;
 }
 small {
-  color: #047857;
+  color: #0d5f40;
   font-weight: 800;
   letter-spacing: 0.06em;
 }
@@ -74,13 +74,13 @@ small {
 article,
 .panel {
   padding: 22px;
-  border: 1px solid #dfe7e2;
+  border: 1px solid #e2e5dc;
   border-radius: 14px;
   background: #fff;
 }
 article p {
   margin: 0 0 18px;
-  color: #5f6f66;
+  color: #54675c;
 }
 article strong {
   display: block;
@@ -93,7 +93,7 @@ article strong {
 }
 .panel p {
   max-width: 620px;
-  color: #5f6f66;
+  color: #54675c;
   line-height: 1.6;
 }
 .admin-state {
@@ -102,13 +102,13 @@ article strong {
   padding: 18px;
   display: grid;
   gap: 7px;
-  color: #064e3b;
-  border: 1px solid #b7d8c7;
+  color: #0a3527;
+  border: 1px solid #b9dbc8;
   border-radius: 12px;
-  background: #ecfdf5;
+  background: #eef6f1;
 }
 .admin-state span {
-  color: #46675a;
+  color: #54675c;
   font-size: 0.85rem;
   line-height: 1.5;
 }

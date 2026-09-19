@@ -20,9 +20,9 @@ export default function ConsumerLayout() {
     >
       <Tabs.Screen name="index" options={{ title: 'Home' }} />
       <Tabs.Screen name="discover" options={{ title: 'Discover' }} />
-      <Tabs.Screen name="create" options={{ title: 'Sell / Request' }} />
+      <Tabs.Screen name="create" options={{ title: 'Sell' }} />
       <Tabs.Screen name="activity" options={{ title: 'Activity' }} />
-      <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
+      <Tabs.Screen name="profile" options={{ title: 'You' }} />
     </Tabs>
   );
 }

@@ -1,14 +1,14 @@
 {
   "expo": {
-    "name": "Comodities",
-    "slug": "comodities",
+    "name": "Zviripo",
+    "slug": "zviripo",
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "scheme": "comodities",
+    "scheme": "zviripo",
     "plugins": ["expo-router", "expo-sqlite"],
     "android": {
-      "package": "zw.co.comodities.app"
+      "package": "zw.co.zviripo.app"
     },
     "experiments": {
       "typedRoutes": true

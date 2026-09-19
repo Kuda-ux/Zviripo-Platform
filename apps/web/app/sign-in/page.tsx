@@ -51,10 +51,10 @@ export default function SignInPage() {
   return (
     <main className="auth-page">
       <a className="brand" href="/">
-        Comodities
+        Zviripo
       </a>
       <div className="auth-card">
-        <p className="eyebrow">COMODITIES ACCOUNT</p>
+        <p className="eyebrow">ZVIRIPO ACCOUNT</p>
         <h1 className="auth-title">
           {mode === 'sign-in' ? 'Welcome back.' : 'Create your account.'}
         </h1>

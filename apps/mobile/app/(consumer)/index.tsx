@@ -5,78 +5,129 @@ import { ScrollView, Pressable, StyleSheet, Text, TextInput, View } from 'react-
 import { ProductCard } from '../../src/components/product-card';
 import { Screen } from '../../src/components/screen';
 import { SectionHeader } from '../../src/components/section-header';
+import { useAuth } from '../../src/lib/auth-context';
 import { fetchMarketplace } from '../../src/lib/marketplace';
 import type { ProductPreview } from '../../src/data/demo';
 
 const actions = [
-  ['Buy', 'Find products nearby', '/(consumer)/discover'],
-  ['Sell', 'Reach local buyers', '/action/sell'],
-  ['Request', 'Tell people what you need', '/action/request'],
-  ['Services', 'Find skilled help', '/action/services'],
+  ['Buy', 'Products nearby', '/(consumer)/discover'],
+  ['Sell', 'Reach local buyers', '/(merchant)/sell'],
+  ['Request', 'Ask for it', '/action/request'],
+  ['Services', 'Skilled help', '/action/services'],
 ] as const;
 
+function greeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
 export default function ConsumerHome() {
+  const { session } = useAuth();
   const [items, setItems] = useState<ProductPreview[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
-    fetchMarketplace().then(({ items }) => {
+    fetchMarketplace().then(({ items, error }) => {
       setItems(items);
+      setError(error);
       setLoading(false);
     });
   }, []);
 
+  const shops = [...new Map(items.map((item) => [item.shop, item])).values()].slice(0, 5);
+  const newest = items.slice(0, 6);
+  const firstName =
+    (session?.user?.user_metadata?.display_name as string | undefined)?.split(' ')[0] ?? 'there';
+
+  const submitSearch = () => {
+    router.push('/(consumer)/discover');
+  };
+
   return (
     <Screen>
       <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>Good morning</Text>
+        <View style={styles.headerLeft}>
+          <Text style={styles.greeting}>
+            {greeting()}, {firstName}
+          </Text>
           <Text style={styles.location}>Mbare, Harare</Text>
         </View>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => router.push('/(consumer)/profile')}
-          style={styles.avatar}
-        >
-          <Text style={styles.avatarText}>TM</Text>
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable
+            accessibilityLabel="Notifications"
+            accessibilityRole="button"
+            onPress={() => router.push('/(consumer)/activity')}
+            style={styles.iconButton}
+          >
+            <Text style={styles.iconButtonText}>🔔</Text>
+          </Pressable>
+          <Pressable
+            accessibilityLabel="Profile"
+            accessibilityRole="button"
+            onPress={() => router.push('/(consumer)/profile')}
+            style={styles.avatar}
+          >
+            <Text style={styles.avatarText}>{firstName[0]?.toUpperCase() ?? 'Z'}</Text>
+          </Pressable>
+        </View>
       </View>
-      <Text style={styles.title}>What are you looking for?</Text>
+
+      <Text style={styles.title}>What are you looking for today?</Text>
       <View style={styles.search}>
         <Text style={styles.searchIcon}>⌕</Text>
         <TextInput
           accessibilityLabel="Search products, shops and services"
-          placeholder="Products, shops, services..."
+          placeholder="Try “rice near me” or “plumber in Mbare”"
           placeholderTextColor={colors.muted}
           returnKeyType="search"
-          onSubmitEditing={() => router.push('/(consumer)/discover')}
+          value={search}
+          onChangeText={setSearch}
+          onSubmitEditing={submitSearch}
           style={styles.searchInput}
         />
       </View>
+
       <View style={styles.actionGrid}>
         {actions.map(([title, detail, href]) => (
           <Pressable
             accessibilityRole="button"
             key={title}
             onPress={() => router.push(href)}
-            style={styles.action}
+            style={[styles.action, title === 'Sell' && styles.actionGold]}
           >
-            <Text style={styles.actionTitle}>{title}</Text>
-            <Text style={styles.actionDetail}>{detail}</Text>
+            <Text style={[styles.actionTitle, title === 'Sell' && styles.actionTitleGold]}>
+              {title}
+            </Text>
+            <Text style={[styles.actionDetail, title === 'Sell' && styles.actionDetailGold]}>
+              {detail}
+            </Text>
           </Pressable>
         ))}
       </View>
+
       <SectionHeader
-        title="Near you"
+        title="Available near you"
         action="See all"
         onAction={() => router.push('/(consumer)/discover')}
       />
       {loading ? (
-        <Text style={styles.opportunityDetail}>Loading live inventory…</Text>
+        <Text style={styles.empty}>Loading live inventory…</Text>
+      ) : error ? (
+        <Text style={styles.empty}>{error}</Text>
       ) : items.length === 0 ? (
-        <Text style={styles.opportunityDetail}>
-          No public listings yet. Published stock will appear here.
-        </Text>
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyTitle}>Nothing nearby yet.</Text>
+          <Text style={styles.emptyBody}>
+            Be the first to ask — merchants near you will see it.
+          </Text>
+          <Pressable onPress={() => router.push('/action/request')} style={styles.emptyCta}>
+            <Text style={styles.emptyCtaText}>Post a request</Text>
+          </Pressable>
+        </View>
       ) : (
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           {items.map((product) => (
@@ -84,6 +135,60 @@ export default function ConsumerHome() {
           ))}
         </ScrollView>
       )}
+
+      {shops.length > 0 ? (
+        <>
+          <SectionHeader title="Shops near you" />
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.shopRow}>
+            {shops.map((shop) => (
+              <Pressable
+                accessibilityRole="button"
+                key={shop.shop}
+                onPress={() => router.push('/(consumer)/discover')}
+                style={styles.shop}
+              >
+                <View style={styles.shopLogo}>
+                  <Text style={styles.shopLogoText}>{shop.shop.slice(0, 2).toUpperCase()}</Text>
+                </View>
+                <Text numberOfLines={1} style={styles.shopName}>
+                  {shop.shop}
+                </Text>
+                <Text style={styles.shopArea}>{shop.area}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </>
+      ) : null}
+
+      {newest.length > 0 ? (
+        <>
+          <SectionHeader title="New on Zviripo" />
+          <View style={styles.newList}>
+            {newest.map((product) => (
+              <Pressable
+                accessibilityRole="button"
+                key={product.id}
+                onPress={() => router.push(`/product/${product.id}`)}
+                style={styles.newItem}
+              >
+                <View style={[styles.newMark, { backgroundColor: product.tone }]}>
+                  <Text style={styles.newMarkText}>{product.name[0]}</Text>
+                </View>
+                <View style={styles.newBody}>
+                  <Text numberOfLines={1} style={styles.newName}>
+                    {product.name}
+                  </Text>
+                  <Text style={styles.newMeta}>
+                    {product.shop} · {product.price}
+                  </Text>
+                </View>
+                <Text style={styles.arrow}>›</Text>
+              </Pressable>
+            ))}
+          </View>
+        </>
+      ) : null}
+
       <SectionHeader title="Opportunities" />
       <Pressable
         accessibilityRole="button"
@@ -94,24 +199,12 @@ export default function ConsumerHome() {
           <Text style={styles.opportunityBadgeText}>WORK</Text>
         </View>
         <View style={styles.opportunityBody}>
-          <Text style={styles.opportunityTitle}>Electrician needed tomorrow</Text>
-          <Text style={styles.opportunityDetail}>Waterfalls · Posted 18 min ago</Text>
+          <Text style={styles.opportunityTitle}>Jobs and opportunities are coming</Text>
+          <Text style={styles.opportunityDetail}>
+            Post what you offer — providers near you will appear here.
+          </Text>
         </View>
         <Text style={styles.arrow}>›</Text>
-      </Pressable>
-      <SectionHeader title="Shops near you" />
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => router.push('/action/shop-profile')}
-        style={styles.shop}
-      >
-        <View style={styles.shopLogo}>
-          <Text style={styles.shopLogoText}>MV</Text>
-        </View>
-        <View>
-          <Text style={styles.shopName}>Mbare Value Store</Text>
-          <Text style={styles.opportunityDetail}>Verified · 1.2 km · Open</Text>
-        </View>
       </Pressable>
     </Screen>
   );
@@ -119,8 +212,21 @@ export default function ConsumerHome() {
 
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  greeting: { color: colors.muted, fontSize: typography.size.caption },
+  headerLeft: {},
+  greeting: { color: colors.muted, fontSize: typography.size.caption, fontWeight: '700' },
   location: { marginTop: 2, color: colors.ink, fontSize: typography.size.body, fontWeight: '800' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
+  iconButton: {
+    width: 46,
+    height: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  iconButtonText: { fontSize: 17 },
   avatar: {
     width: 46,
     height: 46,
@@ -131,16 +237,16 @@ const styles = StyleSheet.create({
   },
   avatarText: { color: colors.brand[900], fontWeight: '800' },
   title: {
-    maxWidth: 330,
+    maxWidth: 340,
     marginTop: spacing[8],
     color: colors.ink,
-    fontSize: 34,
-    lineHeight: 39,
+    fontSize: 36,
+    lineHeight: 41,
     fontWeight: '900',
-    letterSpacing: -1.3,
+    letterSpacing: -1.4,
   },
   search: {
-    minHeight: 58,
+    minHeight: 62,
     marginTop: spacing[5],
     paddingHorizontal: spacing[4],
     flexDirection: 'row',
@@ -172,37 +278,36 @@ const styles = StyleSheet.create({
     borderRadius: radii.medium,
     backgroundColor: colors.brand[900],
   },
+  actionGold: { backgroundColor: colors.accent[500] },
   actionTitle: { color: colors.surface, fontSize: 17, fontWeight: '900' },
+  actionTitleGold: { color: colors.brand[900] },
   actionDetail: { color: '#a9c4b8', fontSize: 11, lineHeight: 15 },
-  opportunity: {
-    padding: spacing[4],
-    flexDirection: 'row',
-    alignItems: 'center',
+  actionDetailGold: { color: '#5f4a12' },
+  empty: { marginVertical: spacing[4], color: colors.muted, fontSize: typography.size.caption },
+  emptyCard: {
+    padding: spacing[5],
+    alignItems: 'flex-start',
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radii.medium,
     backgroundColor: colors.surface,
   },
-  opportunityBadge: {
-    paddingHorizontal: spacing[2],
-    paddingVertical: spacing[2],
-    borderRadius: radii.small,
-    backgroundColor: '#fff0d8',
+  emptyTitle: { color: colors.ink, fontWeight: '900', fontSize: 17 },
+  emptyBody: { marginTop: spacing[1], color: colors.muted, fontSize: 13, lineHeight: 19 },
+  emptyCta: {
+    marginTop: spacing[4],
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+    borderRadius: radii.medium,
+    backgroundColor: colors.brand[700],
   },
-  opportunityBadgeText: { color: colors.warning, fontSize: 10, fontWeight: '900' },
-  opportunityBody: { flex: 1, marginLeft: spacing[3] },
-  opportunityTitle: { color: colors.ink, fontWeight: '800' },
-  opportunityDetail: {
-    marginTop: spacing[1],
-    color: colors.muted,
-    fontSize: typography.size.caption,
-  },
-  arrow: { color: colors.muted, fontSize: 28 },
+  emptyCtaText: { color: colors.surface, fontWeight: '900' },
+  shopRow: { marginBottom: spacing[2] },
   shop: {
-    padding: spacing[4],
-    flexDirection: 'row',
+    width: 110,
+    marginRight: spacing[3],
+    padding: spacing[3],
     alignItems: 'center',
-    gap: spacing[3],
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radii.medium,
@@ -217,5 +322,52 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brand[100],
   },
   shopLogoText: { color: colors.brand[900], fontWeight: '900' },
-  shopName: { color: colors.ink, fontWeight: '900' },
+  shopName: { marginTop: spacing[2], color: colors.ink, fontSize: 12, fontWeight: '800' },
+  shopArea: { marginTop: 2, color: colors.muted, fontSize: 11 },
+  newList: { gap: spacing[2] },
+  newItem: {
+    padding: spacing[3],
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.medium,
+    backgroundColor: colors.surface,
+  },
+  newMark: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radii.small,
+  },
+  newMarkText: { color: colors.ink, fontSize: 18, fontWeight: '900', opacity: 0.4 },
+  newBody: { flex: 1, marginLeft: spacing[3] },
+  newName: { color: colors.ink, fontWeight: '800' },
+  newMeta: { marginTop: 2, color: colors.muted, fontSize: 12 },
+  opportunity: {
+    padding: spacing[4],
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.medium,
+    backgroundColor: colors.surface,
+  },
+  opportunityBadge: {
+    paddingHorizontal: spacing[2],
+    paddingVertical: spacing[2],
+    borderRadius: radii.small,
+    backgroundColor: colors.accent[100],
+  },
+  opportunityBadgeText: { color: colors.accent[700], fontSize: 10, fontWeight: '900' },
+  opportunityBody: { flex: 1, marginLeft: spacing[3] },
+  opportunityTitle: { color: colors.ink, fontWeight: '800' },
+  opportunityDetail: {
+    marginTop: spacing[1],
+    color: colors.muted,
+    fontSize: typography.size.caption,
+    lineHeight: 17,
+  },
+  arrow: { color: colors.muted, fontSize: 28 },
 });

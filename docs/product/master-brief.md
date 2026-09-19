@@ -1,4 +1,4 @@
-# Comodities Master Product Brief
+# Zviripo Master Product Brief
 
 ## Vision
 

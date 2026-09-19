@@ -1,9 +1,11 @@
 import { colors, radii, spacing, typography } from '@comodities/ui';
 import { router } from 'expo-router';
+import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { ProductPreview } from '../data/demo';
 
 export function ProductCard({ product }: { product: ProductPreview }) {
+  const [saved, setSaved] = useState(false);
   return (
     <Pressable
       accessibilityRole="button"
@@ -12,9 +14,19 @@ export function ProductCard({ product }: { product: ProductPreview }) {
     >
       <View style={[styles.image, { backgroundColor: product.tone }]}>
         <Text style={styles.imageLabel}>{product.name.slice(0, 1)}</Text>
-        <View style={styles.save}>
-          <Text>♡</Text>
-        </View>
+        <Pressable
+          accessibilityLabel={saved ? `Remove ${product.name} from saved` : `Save ${product.name}`}
+          accessibilityRole="button"
+          onPress={(event) => {
+            event.stopPropagation();
+            setSaved((value) => !value);
+          }}
+          style={styles.save}
+        >
+          <Text style={[styles.saveIcon, saved && styles.saveIconActive]}>
+            {saved ? '♥' : '♡'}
+          </Text>
+        </Pressable>
       </View>
       <View style={styles.body}>
         <View style={styles.priceRow}>
@@ -51,13 +63,15 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: spacing[3],
     right: spacing[3],
-    width: 36,
-    height: 36,
+    width: 38,
+    height: 38,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radii.pill,
     backgroundColor: colors.surface,
   },
+  saveIcon: { color: colors.muted, fontSize: 18 },
+  saveIconActive: { color: colors.danger },
   body: { padding: spacing[4] },
   priceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   price: { color: colors.ink, fontSize: typography.size.title, fontWeight: '900' },

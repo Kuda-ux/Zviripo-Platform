@@ -62,7 +62,7 @@ export default function AdminHome() {
   return (
     <main>
       <aside>
-        <strong>Comodities</strong>
+        <strong>Zviripo</strong>
         <p>Operations</p>
         {sections.map((item) => (
           <button

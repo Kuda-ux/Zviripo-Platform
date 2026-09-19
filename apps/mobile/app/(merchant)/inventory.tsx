@@ -185,7 +185,7 @@ export default function InventoryScreen() {
                       row.businessProduct.price_minor,
                       row.businessProduct.currency_code,
                     )}{' '}
-                    · {row.businessProduct.is_listed ? 'Listed on Comodities' : 'Not listed'}
+                    · {row.businessProduct.is_listed ? 'Listed on Zviripo' : 'Not listed'}
                   </Text>
                   <View style={styles.rowActions}>
                     <Pressable
@@ -197,7 +197,7 @@ export default function InventoryScreen() {
                         <ActivityIndicator size="small" color={colors.brand[700]} />
                       ) : (
                         <Text style={styles.smallActionText}>
-                          {row.businessProduct.is_listed ? 'Unlist' : 'List on Comodities'}
+                          {row.businessProduct.is_listed ? 'Unlist' : 'List on Zviripo'}
                         </Text>
                       )}
                     </Pressable>

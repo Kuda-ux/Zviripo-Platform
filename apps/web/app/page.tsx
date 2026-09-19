@@ -62,7 +62,7 @@ export default function Home() {
     <main>
       <nav>
         <a className="brand" href="#">
-          Comodities
+          Zviripo
         </a>
         <div className="nav-links">
           <a href="#nearby">Discover</a>
@@ -73,7 +73,7 @@ export default function Home() {
       </nav>
       <section className="hero">
         <div className="hero-copy">
-          <p className="eyebrow">ZIMBABWE COMMERCE, CONNECTED</p>
+          <p className="eyebrow">ZVIRIPO · ZIMBABWE’S CONNECTED EVERYDAY ECONOMY</p>
           <h1>Find what you need, closer to home.</h1>
           <p className="lede">
             Search local products, trusted shops, skilled services and real opportunities—without
@@ -299,7 +299,7 @@ export default function Home() {
         </div>
       </section>
       <footer>
-        <strong>Comodities</strong>
+        <strong>Zviripo</strong>
         <p>Find it. Sell it. Need it. Build with it.</p>
         <span>Built for Zimbabwe’s everyday economy.</span>
       </footer>

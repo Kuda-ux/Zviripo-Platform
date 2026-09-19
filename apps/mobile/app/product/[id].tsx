@@ -82,9 +82,7 @@ export default function ProductDetail() {
             </View>
             <View style={styles.shopBody}>
               <Text style={styles.shopName}>{listing.business_name}</Text>
-              <Text style={styles.meta}>
-                Verified business · {listing.available_quantity} in stock
-              </Text>
+              <Text style={styles.meta}>On Zviripo · {listing.available_quantity} in stock</Text>
             </View>
           </View>
           <Text style={styles.sectionTitle}>About this item</Text>

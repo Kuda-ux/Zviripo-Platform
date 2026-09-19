@@ -2,20 +2,50 @@ import { colors, radii, spacing, typography } from '@comodities/ui';
 import { Link, router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Screen } from '../../src/components/screen';
+import { useAuth } from '../../src/lib/auth-context';
 
 export default function ProfileScreen() {
+  const { session, signOut } = useAuth();
+  const displayName =
+    (session?.user?.user_metadata?.display_name as string | undefined) ??
+    session?.user?.email ??
+    'Guest';
+  const initial = displayName[0]?.toUpperCase() ?? 'Z';
+
   return (
     <Screen>
-      <Text style={styles.title}>Your Comodities</Text>
+      <Text style={styles.title}>Your Zviripo</Text>
       <View style={styles.profile}>
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>TM</Text>
+          <Text style={styles.avatarText}>{initial}</Text>
         </View>
         <View>
-          <Text style={styles.name}>Tariro M.</Text>
-          <Text style={styles.detail}>Mbare, Harare · Phone verified</Text>
+          <Text style={styles.name}>{displayName}</Text>
+          <Text style={styles.detail}>
+            {session ? 'Signed in' : 'Not signed in — sign in to save and sell'}
+          </Text>
         </View>
       </View>
+      {session ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={async () => {
+            await signOut();
+            router.replace('/');
+          }}
+          style={styles.signOut}
+        >
+          <Text style={styles.signOutText}>Sign out</Text>
+        </Pressable>
+      ) : (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push('/(auth)/sign-in')}
+          style={styles.signOut}
+        >
+          <Text style={styles.signOutText}>Sign in</Text>
+        </Pressable>
+      )}
       <View style={styles.menu}>
         {[
           'Saved items',
@@ -73,7 +103,18 @@ const styles = StyleSheet.create({
   },
   avatarText: { color: colors.brand[900], fontSize: 18, fontWeight: '900' },
   name: { color: colors.surface, fontSize: 18, fontWeight: '900' },
-  detail: { marginTop: spacing[1], color: '#b8d0c5', fontSize: typography.size.caption },
+  detail: { marginTop: spacing[1], color: '#b5cfc3', fontSize: typography.size.caption },
+  signOut: {
+    minHeight: 48,
+    marginTop: spacing[3],
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.medium,
+    backgroundColor: colors.surface,
+  },
+  signOutText: { color: colors.danger, fontWeight: '800' },
   menu: {
     marginTop: spacing[5],
     overflow: 'hidden',

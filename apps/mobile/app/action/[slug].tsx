@@ -85,7 +85,7 @@ export default function ActionScreen() {
         <Pressable accessibilityRole="button" onPress={() => router.back()} style={styles.back}>
           <Text style={styles.backText}>‹ Back</Text>
         </Pressable>
-        <Text style={styles.eyebrow}>COMODITIES</Text>
+        <Text style={styles.eyebrow}>ZVIRIPO</Text>
         <Text style={styles.title}>{config.title}</Text>
         <Text style={styles.description}>{config.description}</Text>
         {submitted ? (
