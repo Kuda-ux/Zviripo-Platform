@@ -54,11 +54,14 @@ a {
 .dark-action {
   min-height: 44px;
   padding: 0 20px;
+  display: inline-flex;
+  align-items: center;
   color: #fff;
   border: 0;
   border-radius: 10px;
   background: #0a3527;
   font-weight: 800;
+  text-decoration: none;
 }
 .hero {
   min-height: 700px;
@@ -349,10 +352,25 @@ h2 {
   color: #b5cfc3;
   line-height: 1.7;
 }
-.request-section button {
+.request-section button,
+.request-cta {
   margin-top: 18px;
+  padding: 15px 22px;
+  display: inline-block;
   color: #0a3527;
+  border: 0;
+  border-radius: 14px;
   background: #e8a020;
+  font-weight: 900;
+  text-decoration: none;
+  cursor: pointer;
+}
+.example-tag {
+  margin: 0;
+  color: #8fb3a2;
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.09em;
 }
 .requests {
   display: grid;

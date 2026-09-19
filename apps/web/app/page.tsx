@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { listMarketplace, type MarketplaceListing } from '@comodities/database';
 import { AuthLink } from '../components/auth-link';
@@ -231,17 +232,12 @@ export default function Home() {
             Post what you need, your area, timing and budget. Relevant local businesses and service
             providers can respond.
           </p>
-          <button
-            onClick={() =>
-              setNotice(
-                'Request creation will open in the mobile app. Your draft has been started.',
-              )
-            }
-          >
+          <Link className="request-cta" href="/sign-in">
             Post a request
-          </button>
+          </Link>
         </div>
         <div className="requests">
+          <p className="example-tag">EXAMPLE</p>
           <article>
             <small>PRODUCT REQUEST</small>
             <strong>50 bags of cement</strong>
@@ -264,12 +260,9 @@ export default function Home() {
             Fast sales, accurate stock, customer credit and digital receipts—designed for
             inexpensive Android devices and unreliable connectivity.
           </p>
-          <button
-            className="dark-action"
-            onClick={() => setNotice('Business setup is ready to continue in the mobile app.')}
-          >
+          <Link className="dark-action" href="/sign-in">
             Set up my business
-          </button>
+          </Link>
         </div>
         <div className="dashboard">
           <header>
@@ -277,7 +270,7 @@ export default function Home() {
               <small>GOOD MORNING</small>
               <strong>Mbare Value Store</strong>
             </div>
-            <span>● Everything synced</span>
+            <span>Example</span>
           </header>
           <div className="today">
             <small>TODAY’S BUSINESS</small>
