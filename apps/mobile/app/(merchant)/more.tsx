@@ -1,93 +1,111 @@
-import { colors, radii, spacing, typography } from '@comodities/ui';
-import { Link, router } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { colors, copy, spacing, type IconName } from '@comodities/ui';
+import { router } from 'expo-router';
+import { StyleSheet, View } from 'react-native';
 import { Screen } from '../../src/components/screen';
+import { useAuth } from '../../src/lib/auth-context';
+import { Button } from '../../src/ui/button';
+import { Icon } from '../../src/ui/icon';
+import { Card, Row } from '../../src/ui/layout';
+import { Press } from '../../src/ui/pressable';
+import { EmptyState } from '../../src/ui/states';
+import { Text } from '../../src/ui/text';
+
+const menu: Array<{ label: string; slug: string; icon: IconName; live?: boolean }> = [
+  { label: 'Marketplace listings', slug: 'sell', icon: 'sell', live: true },
+  { label: 'Business insights', slug: 'insights', icon: 'trendUp', live: true },
+  { label: 'Customers', slug: 'customers', icon: 'profile' },
+  { label: 'Credit / On Book', slug: 'credit', icon: 'receipt' },
+  { label: 'Verification', slug: 'verification', icon: 'verified' },
+  { label: 'Team & devices', slug: 'team', icon: 'business' },
+  { label: 'Settings & support', slug: 'settings', icon: 'settings' },
+];
 
 export default function MerchantMore() {
+  const { businesses, session, signOut } = useAuth();
+  const business = businesses[0]?.business ?? null;
+
+  if (!session || !business) {
+    return (
+      <Screen>
+        <EmptyState
+          action={{
+            label: session ? 'Create my business' : 'Sign in',
+            onPress: () => router.push(session ? '/(merchant)/setup' : '/(auth)/sign-in'),
+          }}
+          detail="Business tools are tied to your business account."
+          icon="business"
+          title={session ? 'Set up your shop' : 'Sign in to run your shop'}
+        />
+      </Screen>
+    );
+  }
+
   return (
     <Screen>
-      <Text style={styles.title}>Business tools</Text>
-      <View style={styles.business}>
-        <Text style={styles.businessName}>Mbare Value Store</Text>
-        <Text style={styles.detail}>Profile 72% complete · Verification ready</Text>
-      </View>
-      <View style={styles.menu}>
-        {[
-          'Customers',
-          'Credit / On Book',
-          'Receipts',
-          'Marketplace listings',
-          'Business insights',
-          'Verification',
-          'Team & devices',
-          'Settings & support',
-        ].map((item) => (
-          <Pressable
+      <Text role="label" tone="brand" style={styles.label}>
+        TOOLS
+      </Text>
+      <Text role="headingXl">Business tools</Text>
+
+      <Card style={styles.business} tone="forest">
+        <Text role="headingMd" tone="onDark">
+          {business.name}
+        </Text>
+        <Text role="bodySm" tone="onDarkMuted" style={{ marginTop: spacing[1] }}>
+          {business.area ? `${business.area} · ` : ''}Active on Zviripo
+        </Text>
+      </Card>
+
+      <Card style={styles.menu}>
+        {menu.map((item, index) => (
+          <Press
+            accessibilityLabel={`${item.label}${item.live ? '' : `. ${copy.comingSoon.label}`}`}
             accessibilityRole="button"
-            key={item}
-            onPress={() =>
-              router.push(
-                `/action/${item.toLowerCase().replaceAll(' ', '-').replaceAll('/', '')}` as never,
-              )
-            }
-            style={styles.row}
+            key={item.slug}
+            onPress={() => router.push(`/action/${item.slug}` as never)}
+            style={[styles.row, index < menu.length - 1 && styles.rowBorder]}
           >
-            <Text style={styles.rowText}>{item}</Text>
-            <Text style={styles.arrow}>›</Text>
-          </Pressable>
+            <Row gap={spacing[3]}>
+              <Icon color={colors.brand.forestDeep} name={item.icon} size={20} />
+              <Text role="body" style={{ fontWeight: '700' }}>
+                {item.label}
+              </Text>
+            </Row>
+            {item.live ? (
+              <Icon color={colors.muted} name="forward" size={18} />
+            ) : (
+              <Text role="caption" tone="muted">
+                {copy.comingSoon.label}
+              </Text>
+            )}
+          </Press>
         ))}
-      </View>
-      <Link href="/(consumer)" style={styles.switch}>
-        Switch to consumer
-      </Link>
+      </Card>
+
+      <Button
+        fullWidth
+        label="Switch to shopping"
+        onPress={() => router.push('/(consumer)' as never)}
+        style={styles.switch}
+        variant="secondary"
+      />
+      <Button fullWidth label="Sign out" onPress={signOut} style={styles.signOut} variant="ghost" />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  title: {
-    marginTop: spacing[4],
-    color: colors.ink,
-    fontSize: typography.size.display,
-    fontWeight: '900',
-  },
-  business: {
-    marginTop: spacing[6],
-    padding: spacing[5],
-    borderRadius: radii.large,
-    backgroundColor: colors.brand[900],
-  },
-  businessName: { color: colors.surface, fontSize: typography.size.title, fontWeight: '900' },
-  detail: { marginTop: spacing[2], color: '#b8d0c5', fontSize: 12 },
-  menu: {
-    marginTop: spacing[5],
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.large,
-    backgroundColor: colors.surface,
-  },
+  label: { marginTop: spacing[2] },
+  business: { marginTop: spacing[5] },
+  menu: { marginTop: spacing[4], padding: 0, overflow: 'hidden' },
   row: {
-    minHeight: 58,
+    minHeight: 56,
     paddingHorizontal: spacing[4],
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
   },
-  rowText: { color: colors.ink, fontWeight: '700' },
-  arrow: { color: colors.muted, fontSize: 24 },
-  switch: {
-    minHeight: 52,
-    marginTop: spacing[5],
-    paddingVertical: 16,
-    overflow: 'hidden',
-    color: colors.brand[700],
-    textAlign: 'center',
-    borderWidth: 1,
-    borderColor: colors.brand[700],
-    borderRadius: radii.medium,
-    fontWeight: '900',
-  },
+  rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  switch: { marginTop: spacing[5] },
+  signOut: { marginTop: spacing[2] },
 });

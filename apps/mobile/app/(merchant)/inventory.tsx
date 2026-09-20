@@ -1,4 +1,4 @@
-import { colors, radii, spacing, typography } from '@comodities/ui';
+import { colors, copy, radii, spacing } from '@comodities/ui';
 import {
   listBusinessProducts,
   toggleListed,
@@ -7,52 +7,50 @@ import {
   type Inventory,
   type Product,
 } from '@comodities/database';
+import { formatMinor, humanizeError } from '@comodities/utils';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { Alert, StyleSheet, View } from 'react-native';
 import { Screen } from '../../src/components/screen';
 import { useAuth } from '../../src/lib/auth-context';
+import { useOnReconnect } from '../../src/lib/connectivity';
 import { supabase } from '../../src/lib/supabase';
+import { Button } from '../../src/ui/button';
+import { Icon } from '../../src/ui/icon';
+import { Input } from '../../src/ui/input';
+import { Card, Row } from '../../src/ui/layout';
+import { Press } from '../../src/ui/pressable';
+import { EmptyState, ErrorState, SkeletonRow } from '../../src/ui/states';
+import { Text } from '../../src/ui/text';
 
-interface Row {
+interface RowData {
   businessProduct: BusinessProduct;
   product: Product | undefined;
   inventory: Inventory | undefined;
-}
-
-function formatCurrency(minor: number, currency: 'USD' | 'ZWG') {
-  const amount = minor / 100;
-  return currency === 'USD' ? `$${amount.toFixed(2)}` : `Z$ ${amount.toFixed(2)}`;
 }
 
 export default function InventoryScreen() {
   const { businesses } = useAuth();
   const business = businesses[0]?.business ?? null;
 
-  const [rows, setRows] = useState<Row[]>([]);
+  const [rows, setRows] = useState<RowData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const [query, setQuery] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [restockId, setRestockId] = useState<string | null>(null);
+  const [restockQty, setRestockQty] = useState(1);
 
-  async function load() {
+  const load = useCallback(async () => {
     if (!business) {
       setLoading(false);
       return;
     }
     setLoading(true);
-    const { data, error } = await listBusinessProducts(supabase, business.id);
-    if (error) {
-      setError(error.message);
-    } else {
+    setError(null);
+    const { data, error: loadError } = await listBusinessProducts(supabase, business.id);
+    if (loadError) setError(loadError);
+    else
       setRows(
         data.map((row) => ({
           businessProduct: row,
@@ -60,14 +58,14 @@ export default function InventoryScreen() {
           inventory: row.inventory,
         })),
       );
-    }
     setLoading(false);
-  }
+  }, [business]);
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [business?.id]);
+  }, [load]);
+
+  useOnReconnect(load);
 
   const visible = rows.filter((row) =>
     (row.product?.name ?? row.businessProduct.sku ?? '')
@@ -79,142 +77,205 @@ export default function InventoryScreen() {
     (row) => (row.inventory?.quantity ?? 0) <= (row.inventory?.low_stock_threshold ?? 3),
   ).length;
 
-  async function toggle(row: Row) {
+  async function toggle(row: RowData) {
     if (!business) return;
     setBusyId(row.businessProduct.id);
-    const { error } = await toggleListed(
+    const { error: toggleError } = await toggleListed(
       supabase,
       row.businessProduct.id,
       !row.businessProduct.is_listed,
     );
     setBusyId(null);
-    if (error) {
-      Alert.alert('Could not update listing', error.message);
+    if (toggleError) {
+      const human = humanizeError(toggleError, 'save');
+      Alert.alert(human.title, human.detail);
       return;
     }
     await load();
   }
 
-  async function restock(row: Row) {
-    if (!business) return;
-    Alert.prompt?.('Add stock', 'Enter quantity received', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Add',
-        onPress: async (value?: string) => {
-          const quantity = Number(value);
-          if (!Number.isFinite(quantity) || quantity <= 0) return;
-          const { error } = await updateStock(supabase, {
-            businessId: business.id,
-            businessProductId: row.businessProduct.id,
-            delta: quantity,
-            reason: 'purchase',
-          });
-          if (error) {
-            Alert.alert('Could not update stock', error.message);
-            return;
-          }
-          await load();
-        },
-      },
-    ]) ?? Alert.alert('Add stock', 'Open the product and use updateStock from the repository.');
+  async function confirmRestock(row: RowData) {
+    if (!business || restockQty <= 0) return;
+    setBusyId(row.businessProduct.id);
+    const { error: stockError } = await updateStock(supabase, {
+      businessId: business.id,
+      businessProductId: row.businessProduct.id,
+      delta: restockQty,
+      reason: 'purchase',
+    });
+    setBusyId(null);
+    if (stockError) {
+      const human = humanizeError(stockError, 'save');
+      Alert.alert(human.title, human.detail);
+      return;
+    }
+    setRestockId(null);
+    setRestockQty(1);
+    await load();
   }
 
   if (!business) {
     return (
       <Screen>
-        <Text style={styles.title}>Set up your business first</Text>
-        <Pressable onPress={() => router.push('/(merchant)/setup')} style={styles.add}>
-          <Text style={styles.addText}>Create business</Text>
-        </Pressable>
+        <EmptyState
+          action={{ label: 'Create my business', onPress: () => router.push('/(merchant)/setup') }}
+          detail="Your stock is tied to a business. Set it up first."
+          icon="business"
+          title="Set up your business first"
+        />
       </Screen>
     );
   }
 
   return (
-    <Screen>
-      <View style={styles.header}>
+    <Screen onRefresh={load}>
+      <Row justify="space-between" style={styles.header}>
         <View>
-          <Text style={styles.eyebrow}>PRODUCTS & STOCK</Text>
-          <Text style={styles.title}>Inventory</Text>
+          <Text role="label" tone="brand">
+            PRODUCTS & STOCK
+          </Text>
+          <Text role="headingXl">Inventory</Text>
         </View>
-        <Pressable
-          accessibilityRole="button"
+        <Button
+          icon="add"
+          label="Add"
           onPress={() => router.push('/(merchant)/add-product')}
-          style={styles.add}
-        >
-          <Text style={styles.addText}>+ Add</Text>
-        </Pressable>
+          variant="secondary"
+        />
+      </Row>
+
+      <View style={styles.search}>
+        <Input icon="search" onChangeText={setQuery} placeholder="Search inventory" value={query} />
       </View>
-      <TextInput
-        accessibilityLabel="Search inventory"
-        placeholder="Search inventory"
-        placeholderTextColor={colors.muted}
-        value={query}
-        onChangeText={setQuery}
-        style={styles.search}
-      />
-      <View style={styles.summary}>
-        <Text style={styles.summaryText}>{rows.length} products</Text>
-        {lowCount > 0 ? <Text style={styles.warning}>{lowCount} low stock</Text> : null}
-      </View>
+
+      <Row justify="space-between" style={styles.summary}>
+        <Text role="caption" tone="muted">
+          {rows.length} {rows.length === 1 ? 'product' : 'products'}
+        </Text>
+        {lowCount > 0 ? (
+          <Text role="caption" tone="warning">
+            {lowCount} low stock
+          </Text>
+        ) : null}
+      </Row>
+
       {loading ? (
-        <Text style={styles.empty}>Loading inventory…</Text>
+        <View style={styles.list}>
+          <SkeletonRow />
+          <SkeletonRow />
+          <SkeletonRow />
+        </View>
       ) : error ? (
-        <Text style={styles.empty}>{error}</Text>
+        <ErrorState error={error} onRetry={load} />
       ) : visible.length === 0 ? (
-        <Text style={styles.empty}>No products yet. Tap “+ Add” to create your first product.</Text>
+        <EmptyState
+          action={
+            query
+              ? undefined
+              : {
+                  label: copy.empty.inventory.action,
+                  onPress: () => router.push('/(merchant)/add-product'),
+                }
+          }
+          detail={query ? 'Try a different name or SKU.' : copy.empty.inventory.detail}
+          icon="inventory"
+          title={query ? `Nothing matches “${query}”` : copy.empty.inventory.title}
+        />
       ) : (
         <View style={styles.list}>
           {visible.map((row) => {
+            const id = row.businessProduct.id;
             const stock = row.inventory?.quantity ?? 0;
             const low = stock <= (row.inventory?.low_stock_threshold ?? 3);
+            const restocking = restockId === id;
             return (
-              <View key={row.businessProduct.id} style={styles.item}>
-                <View style={styles.initial}>
-                  <Text style={styles.initialText}>
-                    {(row.product?.name ?? row.businessProduct.sku ?? '?')[0]}
-                  </Text>
-                </View>
-                <View style={styles.itemBody}>
-                  <Text style={styles.name}>
-                    {row.product?.name ?? row.businessProduct.sku ?? 'Unnamed'}
-                  </Text>
-                  <Text style={styles.price}>
-                    {formatCurrency(
-                      row.businessProduct.price_minor,
-                      row.businessProduct.currency_code,
-                    )}{' '}
-                    · {row.businessProduct.is_listed ? 'Listed on Zviripo' : 'Not listed'}
-                  </Text>
-                  <View style={styles.rowActions}>
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => toggle(row)}
-                      style={styles.smallAction}
-                    >
-                      {busyId === row.businessProduct.id ? (
-                        <ActivityIndicator size="small" color={colors.brand[700]} />
-                      ) : (
-                        <Text style={styles.smallActionText}>
-                          {row.businessProduct.is_listed ? 'Unlist' : 'List on Zviripo'}
-                        </Text>
-                      )}
-                    </Pressable>
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => restock(row)}
-                      style={styles.smallAction}
-                    >
-                      <Text style={styles.smallActionText}>Add stock</Text>
-                    </Pressable>
+              <Card key={id} style={styles.item}>
+                <Row align="flex-start">
+                  <View style={styles.initial}>
+                    <Text role="headingMd" tone="brand">
+                      {(row.product?.name ?? row.businessProduct.sku ?? '?')[0]}
+                    </Text>
                   </View>
-                </View>
-                <View>
-                  <Text style={[styles.stock, low && styles.low]}>{stock}</Text>
-                  <Text style={styles.units}>in stock</Text>
-                </View>
-              </View>
+                  <View style={styles.itemBody}>
+                    <Text numberOfLines={1} role="headingSm">
+                      {row.product?.name ?? row.businessProduct.sku ?? 'Unnamed'}
+                    </Text>
+                    <Text role="caption" tone="muted" style={{ marginTop: spacing[1] }}>
+                      {formatMinor(
+                        row.businessProduct.price_minor,
+                        row.businessProduct.currency_code,
+                      )}
+                      {' · '}
+                      {row.businessProduct.is_listed ? 'Listed on Zviripo' : 'Not listed'}
+                    </Text>
+                    <Row gap={spacing[2]} style={styles.rowActions}>
+                      <Button
+                        disabled={busyId === id}
+                        label={row.businessProduct.is_listed ? 'Unlist' : 'List on Zviripo'}
+                        loading={busyId === id && !restocking}
+                        onPress={() => toggle(row)}
+                        size="sm"
+                        variant="secondary"
+                      />
+                      <Button
+                        label={restocking ? 'Close' : 'Add stock'}
+                        onPress={() => {
+                          setRestockId(restocking ? null : id);
+                          setRestockQty(1);
+                        }}
+                        size="sm"
+                        variant={restocking ? 'ghost' : 'secondary'}
+                      />
+                    </Row>
+                  </View>
+                  <View style={styles.stockBlock}>
+                    <Text role="headingMd" tone={low ? 'warning' : 'ink'}>
+                      {stock}
+                    </Text>
+                    <Text role="caption" tone="muted">
+                      in stock
+                    </Text>
+                  </View>
+                </Row>
+                {restocking ? (
+                  <View style={styles.restock}>
+                    <Row justify="space-between">
+                      <Text role="caption" tone="muted">
+                        Quantity received
+                      </Text>
+                      <Row gap={spacing[2]}>
+                        <Press
+                          accessibilityLabel="Reduce quantity"
+                          accessibilityRole="button"
+                          onPress={() => setRestockQty((q) => Math.max(1, q - 1))}
+                          style={styles.stepper}
+                        >
+                          <Icon color={colors.ink} name="remove" size={16} />
+                        </Press>
+                        <Text role="headingMd" style={styles.qty}>
+                          {restockQty}
+                        </Text>
+                        <Press
+                          accessibilityLabel="Increase quantity"
+                          accessibilityRole="button"
+                          onPress={() => setRestockQty((q) => Math.min(9999, q + 1))}
+                          style={styles.stepper}
+                        >
+                          <Icon color={colors.ink} name="add" size={16} />
+                        </Press>
+                      </Row>
+                    </Row>
+                    <Button
+                      disabled={busyId === id}
+                      fullWidth
+                      label={`Add ${restockQty} to stock`}
+                      loading={busyId === id}
+                      onPress={() => confirmRestock(row)}
+                      style={{ marginTop: spacing[3] }}
+                    />
+                  </View>
+                ) : null}
+              </Card>
             );
           })}
         </View>
@@ -224,70 +285,37 @@ export default function InventoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: {
-    marginTop: spacing[2],
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  eyebrow: { color: colors.brand[700], fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
-  title: { color: colors.ink, fontSize: typography.size.display, fontWeight: '900' },
-  add: {
-    minHeight: 44,
-    paddingHorizontal: spacing[4],
-    justifyContent: 'center',
-    borderRadius: radii.medium,
-    backgroundColor: colors.brand[700],
-  },
-  addText: { color: colors.surface, fontWeight: '900' },
-  search: {
-    minHeight: 54,
-    marginTop: spacing[5],
-    paddingHorizontal: spacing[4],
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.medium,
-    backgroundColor: colors.surface,
-    color: colors.ink,
-  },
-  summary: { marginVertical: spacing[4], flexDirection: 'row', justifyContent: 'space-between' },
-  summaryText: { color: colors.muted, fontSize: 12, fontWeight: '700' },
-  warning: { color: colors.warning, fontSize: 12, fontWeight: '800' },
-  empty: { marginTop: spacing[8], color: colors.muted, textAlign: 'center' },
-  list: { gap: spacing[2] },
-  item: {
-    minHeight: 76,
-    padding: spacing[3],
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.medium,
-    backgroundColor: colors.surface,
-  },
+  header: { marginTop: spacing[2] },
+  search: { marginTop: spacing[5] },
+  summary: { marginVertical: spacing[4] },
+  list: { gap: spacing[3] },
+  item: { padding: spacing[3] },
   initial: {
     width: 48,
     height: 48,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: radii.small,
-    backgroundColor: colors.brand[100],
+    borderRadius: radii.sm,
+    backgroundColor: colors.brand.tint,
   },
-  initialText: { color: colors.brand[700], fontWeight: '900' },
   itemBody: { flex: 1, marginLeft: spacing[3] },
-  name: { color: colors.ink, fontWeight: '800' },
-  price: { marginTop: spacing[1], color: colors.muted, fontSize: 11 },
-  rowActions: { marginTop: spacing[2], flexDirection: 'row', gap: spacing[2] },
-  smallAction: {
-    minHeight: 30,
-    paddingHorizontal: spacing[3],
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.brand[700],
-    borderRadius: radii.pill,
+  rowActions: { marginTop: spacing[3] },
+  stockBlock: { alignItems: 'flex-end' },
+  restock: {
+    marginTop: spacing[3],
+    paddingTop: spacing[3],
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
-  smallActionText: { color: colors.brand[700], fontSize: 11, fontWeight: '800' },
-  stock: { color: colors.ink, textAlign: 'right', fontSize: 18, fontWeight: '900' },
-  low: { color: colors.warning },
-  units: { color: colors.muted, fontSize: 10 },
+  stepper: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  qty: { minWidth: 32, textAlign: 'center' },
 });

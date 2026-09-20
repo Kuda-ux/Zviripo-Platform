@@ -1,82 +1,111 @@
-import { colors, radii, spacing, typography } from '@comodities/ui';
+import { colors, copy, spacing, type IconName } from '@comodities/ui';
 import { getSales, listBusinessProducts } from '@comodities/database';
-import { Link, router } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { MetricCard } from '../../src/components/metric-card';
+import { formatMinor } from '@comodities/utils';
+import { router } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 import { Screen } from '../../src/components/screen';
-import { SectionHeader } from '../../src/components/section-header';
-import { SyncPill } from '../../src/components/sync-pill';
+import { SyncStatus, type SyncPhase } from '../../src/components/sync-status';
 import { useAuth } from '../../src/lib/auth-context';
+import { useConnectivity, useOnReconnect } from '../../src/lib/connectivity';
 import { pendingSaleCount, syncPendingSales } from '../../src/lib/offline-pos';
 import { supabase } from '../../src/lib/supabase';
-
-function formatCurrency(minor: number, currency: 'USD' | 'ZWG' = 'USD') {
-  const amount = minor / 100;
-  return currency === 'USD' ? `$${amount.toFixed(2)}` : `Z$ ${amount.toFixed(2)}`;
-}
+import { Button } from '../../src/ui/button';
+import { Icon } from '../../src/ui/icon';
+import { Card, Row, SectionHeader } from '../../src/ui/layout';
+import { Press } from '../../src/ui/pressable';
+import { EmptyState, Skeleton } from '../../src/ui/states';
+import { Text } from '../../src/ui/text';
 
 export default function MerchantDashboard() {
-  const { session, loading, businesses } = useAuth();
+  const { session, loading: authLoading, businesses } = useAuth();
   const business = businesses[0]?.business ?? null;
+  const connectivity = useConnectivity();
 
   const [todayTotal, setTodayTotal] = useState(0);
   const [todayCount, setTodayCount] = useState(0);
   const [itemCount, setItemCount] = useState(0);
   const [pending, setPending] = useState(0);
+  const [phase, setPhase] = useState<SyncPhase>('idle');
+  const [loading, setLoading] = useState(true);
   const [lowStock, setLowStock] = useState(0);
   const [listedCount, setListedCount] = useState(0);
   const [lowItems, setLowItems] = useState<string[]>([]);
+  const [currency, setCurrency] = useState<'USD' | 'ZWG'>('USD');
+
+  const sync = useCallback(async () => {
+    if (connectivity === 'offline') return;
+    setPhase('syncing');
+    const result = await syncPendingSales();
+    setPhase(result.failed > 0 ? 'failed' : 'idle');
+    setPending(result.pending);
+  }, [connectivity]);
+
+  const load = useCallback(async () => {
+    setPending(await pendingSaleCount());
+    if (!business) {
+      setLoading(false);
+      return;
+    }
+    const [{ data: sales }, { data: products }] = await Promise.all([
+      getSales(supabase, business.id, 100),
+      listBusinessProducts(supabase, business.id),
+    ]);
+    const today = new Date();
+    const sameDay = sales.filter((sale) => {
+      const occurred = new Date(sale.occurred_at);
+      return (
+        occurred.getFullYear() === today.getFullYear() &&
+        occurred.getMonth() === today.getMonth() &&
+        occurred.getDate() === today.getDate()
+      );
+    });
+    setTodayTotal(sameDay.reduce((sum, sale) => sum + sale.total_minor, 0));
+    setTodayCount(sameDay.length);
+    setCurrency((sales[0]?.currency_code as 'USD' | 'ZWG' | undefined) ?? 'USD');
+    setItemCount(
+      sameDay.reduce(
+        (sum, sale) =>
+          sum +
+          ((sale.sale_items as { quantity: number }[] | undefined) ?? []).reduce(
+            (inner, item) => inner + Number(item.quantity),
+            0,
+          ),
+        0,
+      ),
+    );
+    const low = products.filter(
+      (row) => (row.inventory?.quantity ?? 0) <= (row.inventory?.low_stock_threshold ?? 3),
+    );
+    setLowStock(low.length);
+    setLowItems(low.map((row) => row.product?.name ?? row.sku ?? 'Unnamed product').slice(0, 3));
+    setListedCount(products.filter((row) => row.is_listed).length);
+    setLoading(false);
+  }, [business]);
 
   useEffect(() => {
-    pendingSaleCount().then(setPending);
-    syncPendingSales().then(({ pending }) => setPending(pending));
-    if (!business) return;
-    getSales(supabase, business.id, 100).then(({ data }) => {
-      const today = new Date();
-      const sameDay = data.filter((sale) => {
-        const occurred = new Date(sale.occurred_at);
-        return (
-          occurred.getFullYear() === today.getFullYear() &&
-          occurred.getMonth() === today.getMonth() &&
-          occurred.getDate() === today.getDate()
-        );
-      });
-      setTodayTotal(sameDay.reduce((sum, sale) => sum + sale.total_minor, 0));
-      setTodayCount(sameDay.length);
-      setItemCount(
-        sameDay.reduce(
-          (sum, sale) =>
-            sum +
-            ((sale.sale_items as { quantity: number }[] | undefined) ?? []).reduce(
-              (inner, item) => inner + Number(item.quantity),
-              0,
-            ),
-          0,
-        ),
-      );
-    });
-    listBusinessProducts(supabase, business.id).then(({ data }) => {
-      const low = data.filter(
-        (row) => (row.inventory?.quantity ?? 0) <= (row.inventory?.low_stock_threshold ?? 3),
-      );
-      setLowStock(low.length);
-      setLowItems(low.map((row) => row.product?.name ?? row.sku ?? 'Unnamed product').slice(0, 3));
-      setListedCount(data.filter((row) => row.is_listed).length);
-    });
-  }, [business?.id]);
+    load();
+    sync();
+  }, [load, sync]);
+
+  useOnReconnect(() => {
+    sync();
+    load();
+  });
 
   const state = useMemo(() => {
-    if (loading) return 'loading';
+    if (authLoading) return 'loading';
     if (!session) return 'signed-out';
     if (!business) return 'no-business';
     return 'ready';
-  }, [loading, session, business]);
+  }, [authLoading, session, business]);
 
   if (state === 'loading') {
     return (
       <Screen>
-        <Text style={styles.greeting}>Loading your workspace…</Text>
+        <Skeleton height={20} width="40%" />
+        <Skeleton height={120} radius={16} style={styles.gap} />
+        <Skeleton height={90} radius={16} style={styles.gap} />
       </Screen>
     );
   }
@@ -84,14 +113,12 @@ export default function MerchantDashboard() {
   if (state === 'signed-out') {
     return (
       <Screen>
-        <Text style={styles.eyebrow}>BUSINESS</Text>
-        <Text style={styles.title}>Sign in to run your shop.</Text>
-        <Text style={styles.description}>
-          Your sales, stock, and credit are tied to your business account.
-        </Text>
-        <Pressable onPress={() => router.push('/(auth)/sign-in')} style={styles.cta}>
-          <Text style={styles.ctaText}>Sign in</Text>
-        </Pressable>
+        <EmptyState
+          action={{ label: 'Sign in', onPress: () => router.push('/(auth)/sign-in') }}
+          detail="Your sales, stock, and credit are tied to your business account."
+          icon="business"
+          title="Sign in to run your shop"
+        />
       </Screen>
     );
   }
@@ -99,206 +126,245 @@ export default function MerchantDashboard() {
   if (state === 'no-business') {
     return (
       <Screen>
-        <Text style={styles.eyebrow}>BUSINESS</Text>
-        <Text style={styles.title}>Set up your shop.</Text>
-        <Text style={styles.description}>
-          Add your business name and area to start selling and publishing stock.
-        </Text>
-        <Pressable onPress={() => router.push('/(merchant)/setup')} style={styles.cta}>
-          <Text style={styles.ctaText}>Create my business</Text>
-        </Pressable>
+        <EmptyState
+          action={{ label: 'Create my business', onPress: () => router.push('/(merchant)/setup') }}
+          detail="Add your business name and area to start selling and publishing stock."
+          icon="business"
+          title="Set up your shop"
+        />
       </Screen>
     );
   }
 
   return (
-    <Screen>
-      <View style={styles.header}>
+    <Screen
+      onRefresh={async () => {
+        await sync();
+        await load();
+      }}
+    >
+      <Row justify="space-between" style={styles.header}>
         <View>
-          <Text style={styles.greeting}>Good morning</Text>
-          <Text style={styles.business}>{business!.name}</Text>
+          <Text role="caption" tone="muted">
+            {copy.tagline}
+          </Text>
+          <Text role="headingMd">{business!.name}</Text>
         </View>
-        <SyncPill pending={pending} />
-      </View>
-      <View style={styles.hero}>
-        <Text style={styles.heroLabel}>TODAY'S BUSINESS</Text>
-        <Text style={styles.heroValue}>{formatCurrency(todayTotal)}</Text>
-        <Text style={styles.heroDetail}>
-          {todayCount} transactions · {itemCount} items sold
+        <SyncStatus connectivity={connectivity} onPress={sync} pending={pending} phase={phase} />
+      </Row>
+
+      <Card style={styles.hero} tone="forest">
+        <Text role="label" style={{ color: colors.gold[500] }}>
+          TODAY'S BUSINESS
         </Text>
-      </View>
-      <View style={styles.metrics}>
-        <MetricCard label="Marketplace" value={String(listedCount)} detail="products listed" />
-        <MetricCard label="Low stock" value={String(lowStock)} detail="See inventory" />
-      </View>
-      <SectionHeader title="Quick actions" />
-      <View style={styles.actions}>
-        <Link href="/(merchant)/sell" style={styles.sell}>
-          Sell now
-        </Link>
-        {[
-          ['Add stock', '/(merchant)/inventory'],
-          ['Add product', '/(merchant)/add-product'],
-          ['Inventory', '/(merchant)/inventory'],
-        ].map(([item, href]) => (
-          <Pressable
-            accessibilityRole="button"
-            key={item}
-            onPress={() => router.push(href as never)}
-            style={styles.action}
-          >
-            <Text style={styles.actionText}>{item}</Text>
-          </Pressable>
-        ))}
-      </View>
-      <SectionHeader title="Attention" />
+        {loading ? (
+          <Skeleton height={42} style={{ marginTop: spacing[4] }} width="55%" />
+        ) : (
+          <Text role="display" tone="onDark" style={styles.heroValue}>
+            {formatMinor(todayTotal, currency)}
+          </Text>
+        )}
+        <Text role="bodySm" tone="onDarkMuted" style={{ marginTop: spacing[2] }}>
+          {todayCount} {todayCount === 1 ? 'transaction' : 'transactions'} · {itemCount} items sold
+        </Text>
+      </Card>
+
+      <Row gap={spacing[3]} style={styles.metrics}>
+        <MetricTile
+          detail={`${listedCount === 1 ? 'product' : 'products'} live for buyers`}
+          label="Marketplace"
+          value={String(listedCount)}
+        />
+        <MetricTile
+          accent={lowStock > 0}
+          detail={lowStock > 0 ? 'See inventory' : 'Stock looks healthy'}
+          label="Low stock"
+          value={String(lowStock)}
+        />
+      </Row>
+
+      <Button
+        fullWidth
+        icon="sell"
+        label="Sell now"
+        onPress={() => router.push('/(merchant)/sell')}
+        size="lg"
+        style={styles.sell}
+        variant="gold"
+      />
+      <Row gap={spacing[3]}>
+        <QuickAction
+          icon="inventory"
+          label="Add stock"
+          onPress={() => router.push('/(merchant)/inventory')}
+        />
+        <QuickAction
+          icon="add"
+          label="Add product"
+          onPress={() => router.push('/(merchant)/add-product')}
+        />
+        <QuickAction
+          icon="trendUp"
+          label="Activity"
+          onPress={() => router.push('/(merchant)/activity')}
+        />
+      </Row>
+
+      <SectionHeader eyebrow="ATTENTION" title="Needs you" />
       {pending > 0 ? (
-        <Pressable
-          accessibilityRole="button"
-          onPress={async () => {
-            const { pending } = await syncPendingSales();
-            setPending(pending);
-          }}
-          style={styles.insight}
-        >
-          <View>
-            <Text style={styles.insightLabel}>SYNC</Text>
-            <Text style={styles.insightTitle}>
-              {pending} {pending === 1 ? 'sale' : 'sales'} saved safely on this device
-            </Text>
-            <Text style={styles.insightDetail}>Tap to sync now</Text>
-          </View>
-          <Text style={styles.arrow}>›</Text>
-        </Pressable>
+        <AttentionCard
+          body={copy.sync.pending(pending).detail}
+          icon="sync"
+          label="SYNC"
+          onPress={connectivity === 'offline' ? undefined : sync}
+          title={copy.sync.pending(pending).label}
+        />
       ) : null}
       {lowItems.length > 0 ? (
-        <Pressable
-          accessibilityRole="button"
+        <AttentionCard
+          body="Review stock levels in inventory"
+          icon="lowStock"
+          label="RESTOCK SOON"
           onPress={() => router.push('/(merchant)/inventory')}
-          style={styles.insight}
-        >
-          <View>
-            <Text style={styles.insightLabel}>RESTOCK SOON</Text>
-            <Text style={styles.insightTitle}>
-              {lowItems[0]}
-              {lowItems.length > 1 ? ` and ${lowItems.length - 1} more` : ''} running low
-            </Text>
-            <Text style={styles.insightDetail}>Review stock levels in inventory</Text>
-          </View>
-          <Text style={styles.arrow}>›</Text>
-        </Pressable>
+          title={`${lowItems[0]}${lowItems.length > 1 ? ` and ${lowItems.length - 1} more` : ''} running low`}
+        />
       ) : null}
-      {listedCount === 0 ? (
-        <Pressable
-          accessibilityRole="button"
+      {listedCount === 0 && !loading ? (
+        <AttentionCard
+          body="Turn on “List on Zviripo” for a product to appear in search"
+          icon="sell"
+          label="MARKETPLACE"
           onPress={() => router.push('/(merchant)/inventory')}
-          style={styles.insight}
-        >
-          <View>
-            <Text style={styles.insightLabel}>MARKETPLACE</Text>
-            <Text style={styles.insightTitle}>Nothing is visible to buyers yet</Text>
-            <Text style={styles.insightDetail}>
-              Turn on “List on Zviripo” for a product to appear in search
-            </Text>
-          </View>
-          <Text style={styles.arrow}>›</Text>
-        </Pressable>
+          title="Nothing is visible to buyers yet"
+        />
       ) : null}
       {pending === 0 && lowItems.length === 0 && listedCount > 0 ? (
-        <View style={styles.insight}>
-          <View>
-            <Text style={styles.insightLabel}>ALL CLEAR</Text>
-            <Text style={styles.insightTitle}>Your business is up to date</Text>
-            <Text style={styles.insightDetail}>
-              {listedCount} {listedCount === 1 ? 'product' : 'products'} live on Zviripo
-            </Text>
-          </View>
-        </View>
+        <Card style={styles.attention}>
+          <Text role="label" tone="success">
+            ALL CLEAR
+          </Text>
+          <Text role="headingSm" style={styles.attentionTitle}>
+            Your business is up to date
+          </Text>
+          <Text role="bodySm" tone="muted">
+            {listedCount} {listedCount === 1 ? 'product' : 'products'} live on Zviripo
+          </Text>
+        </Card>
       ) : null}
     </Screen>
   );
 }
 
+function MetricTile({
+  label,
+  value,
+  detail,
+  accent,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  accent?: boolean;
+}) {
+  return (
+    <Card style={styles.metric}>
+      <Text role="caption" tone="muted">
+        {label}
+      </Text>
+      <Text role="headingLg" style={{ marginTop: spacing[2] }}>
+        {value}
+      </Text>
+      <Text role="caption" tone={accent ? 'warning' : 'success'} style={{ marginTop: spacing[1] }}>
+        {detail}
+      </Text>
+    </Card>
+  );
+}
+
+function QuickAction({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: IconName;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Press
+      accessibilityLabel={label}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={styles.quick}
+    >
+      <Icon color={colors.brand.forestDeep} name={icon} size={20} />
+      <Text role="caption" style={{ fontWeight: '800' }}>
+        {label}
+      </Text>
+    </Press>
+  );
+}
+
+function AttentionCard({
+  label,
+  title,
+  body,
+  icon,
+  onPress,
+}: {
+  label: string;
+  title: string;
+  body: string;
+  icon: IconName;
+  onPress?: () => void;
+}) {
+  return (
+    <Press
+      accessibilityLabel={`${title}. ${body}`}
+      accessibilityRole={onPress ? 'button' : 'summary'}
+      disabled={!onPress}
+      feedback={!!onPress}
+      onPress={onPress}
+    >
+      <Card style={styles.attention}>
+        <Row justify="space-between">
+          <View style={{ flex: 1 }}>
+            <Text role="label" tone="brand">
+              {label}
+            </Text>
+            <Text role="headingSm" style={styles.attentionTitle}>
+              {title}
+            </Text>
+            <Text role="bodySm" tone="muted">
+              {body}
+            </Text>
+          </View>
+          <Icon color={colors.muted} name={onPress ? 'forward' : icon} size={onPress ? 20 : 22} />
+        </Row>
+      </Card>
+    </Press>
+  );
+}
+
 const styles = StyleSheet.create({
-  header: {
-    marginTop: spacing[2],
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  eyebrow: { color: colors.brand[700], fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
-  title: {
-    marginTop: spacing[2],
-    color: colors.ink,
-    fontSize: typography.size.display,
-    fontWeight: '900',
-  },
-  description: { marginTop: spacing[3], color: colors.muted, fontSize: typography.size.body },
-  greeting: { color: colors.muted, fontSize: typography.size.caption },
-  business: { marginTop: 2, color: colors.ink, fontSize: 18, fontWeight: '900' },
-  cta: {
-    minHeight: 54,
-    marginTop: spacing[6],
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radii.medium,
-    backgroundColor: colors.brand[700],
-  },
-  ctaText: { color: colors.surface, fontWeight: '900' },
-  hero: {
-    marginTop: spacing[8],
-    padding: spacing[6],
-    borderRadius: radii.large,
-    backgroundColor: colors.brand[900],
-  },
-  heroLabel: { color: colors.brand[100], fontSize: 11, fontWeight: '900', letterSpacing: 1.2 },
-  heroValue: {
-    marginTop: spacing[4],
-    color: colors.surface,
-    fontSize: 42,
-    fontWeight: '900',
-    letterSpacing: -1.4,
-  },
-  heroDetail: { marginTop: spacing[2], color: '#b8d0c5' },
-  metrics: { marginTop: spacing[3], flexDirection: 'row', justifyContent: 'space-between' },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2] },
-  sell: {
-    minHeight: 50,
-    width: '100%',
-    paddingVertical: 15,
-    overflow: 'hidden',
-    color: colors.brand[900],
-    textAlign: 'center',
-    borderRadius: radii.medium,
-    backgroundColor: colors.accent[500],
-    fontWeight: '900',
-    fontSize: 17,
-  },
-  action: {
-    minHeight: 48,
+  header: { marginTop: spacing[2] },
+  gap: { marginTop: spacing[4] },
+  hero: { marginTop: spacing[5], padding: spacing[6] },
+  heroValue: { marginTop: spacing[3] },
+  metrics: { marginTop: spacing[3], alignItems: 'stretch' },
+  metric: { flex: 1, minHeight: 110 },
+  sell: { marginTop: spacing[5], marginBottom: spacing[3] },
+  quick: {
+    minHeight: 76,
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.medium,
-    backgroundColor: colors.surface,
-  },
-  actionText: { color: colors.ink, fontSize: 12, fontWeight: '800' },
-  insight: {
-    minHeight: 94,
-    marginBottom: spacing[3],
-    padding: spacing[4],
-    flexDirection: 'row',
-    alignItems: 'center',
+    padding: spacing[3],
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radii.medium,
+    borderRadius: 14,
     backgroundColor: colors.surface,
   },
-  insightLabel: { color: colors.brand[700], fontSize: 10, fontWeight: '900', letterSpacing: 1 },
-  insightTitle: { marginTop: spacing[2], color: colors.ink, fontWeight: '900' },
-  insightDetail: { marginTop: spacing[1], color: colors.muted, fontSize: typography.size.caption },
-  arrow: { color: colors.muted, fontSize: 28 },
+  attention: { marginBottom: spacing[3] },
+  attentionTitle: { marginTop: spacing[1], marginBottom: spacing[1] },
 });

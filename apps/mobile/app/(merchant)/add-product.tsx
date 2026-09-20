@@ -1,19 +1,19 @@
-import { colors, radii, spacing, typography } from '@comodities/ui';
+import { colors, radii, spacing } from '@comodities/ui';
 import { createProduct } from '@comodities/database';
+import { humanizeError } from '@comodities/utils';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { Screen } from '../../src/components/screen';
 import { useAuth } from '../../src/lib/auth-context';
 import { supabase } from '../../src/lib/supabase';
+import { Button } from '../../src/ui/button';
+import { Icon } from '../../src/ui/icon';
+import { Input } from '../../src/ui/input';
+import { Chip, IconButton, Row } from '../../src/ui/layout';
+import { Press } from '../../src/ui/pressable';
+import { EmptyState } from '../../src/ui/states';
+import { Text } from '../../src/ui/text';
 
 export default function AddProductScreen() {
   const { businesses } = useAuth();
@@ -32,14 +32,17 @@ export default function AddProductScreen() {
 
   if (!business) {
     return (
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.page}>
-          <Text style={styles.title}>Set up your business first</Text>
-          <Pressable onPress={() => router.replace('/(merchant)/setup')} style={styles.primary}>
-            <Text style={styles.primaryText}>Create business</Text>
-          </Pressable>
-        </View>
-      </SafeAreaView>
+      <Screen>
+        <EmptyState
+          action={{
+            label: 'Create my business',
+            onPress: () => router.replace('/(merchant)/setup'),
+          }}
+          detail="Products belong to a business. Set it up first."
+          icon="business"
+          title="Set up your business first"
+        />
+      </Screen>
     );
   }
 
@@ -55,8 +58,12 @@ export default function AddProductScreen() {
       setError('Enter a valid price, e.g. 8.50');
       return;
     }
-    if (stock.trim() && (!Number.isFinite(stockNumber) || stockNumber < 0)) {
-      setError('Enter a valid stock quantity.');
+    if (!Number.isSafeInteger(Math.round(priceNumber * 100))) {
+      setError('That price is too large.');
+      return;
+    }
+    if (stock.trim() && (!Number.isSafeInteger(stockNumber) || stockNumber < 0)) {
+      setError('Enter a valid whole-number stock quantity.');
       return;
     }
 
@@ -82,7 +89,9 @@ export default function AddProductScreen() {
     setBusy(false);
 
     if (createError || !data) {
-      setError(createError?.message ?? 'Could not create the product.');
+      setError(
+        humanizeError(createError ?? new Error('Could not create the product.'), 'save').detail,
+      );
       return;
     }
 
@@ -90,212 +99,137 @@ export default function AddProductScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
-        <Pressable onPress={() => router.back()} style={styles.back}>
-          <Text style={styles.backText}>‹ Back</Text>
-        </Pressable>
-        <Text style={styles.eyebrow}>INVENTORY</Text>
-        <Text style={styles.title}>Add a product.</Text>
-        <Text style={styles.description}>
-          Price it, set the starting stock, and choose whether buyers can see it.
-        </Text>
+    <Screen>
+      <IconButton accessibilityLabel="Back" icon="back" onPress={() => router.back()} />
+      <Text role="label" tone="brand" style={styles.eyebrow}>
+        INVENTORY
+      </Text>
+      <Text role="headingXl" style={styles.title}>
+        Add a product
+      </Text>
+      <Text role="body" tone="muted" style={styles.description}>
+        Price it, set the starting stock, and choose whether buyers can see it.
+      </Text>
 
-        <View style={styles.form}>
-          <View>
-            <Text style={styles.label}>Product name</Text>
-            <TextInput
-              accessibilityLabel="Product name"
-              onChangeText={setName}
-              placeholder="e.g. Roller meal 10kg"
-              placeholderTextColor={colors.muted}
-              style={styles.input}
-              value={name}
-            />
-          </View>
-          <View>
-            <Text style={styles.label}>Description</Text>
-            <TextInput
-              accessibilityLabel="Description"
-              multiline
-              onChangeText={setDescription}
-              placeholder="Optional details buyers should know"
-              placeholderTextColor={colors.muted}
-              style={[styles.input, styles.multiline]}
-              value={description}
-            />
-          </View>
-          <View>
-            <Text style={styles.label}>Brand (optional)</Text>
-            <TextInput
-              accessibilityLabel="Brand"
-              onChangeText={setBrand}
-              placeholder="e.g. National Foods"
-              placeholderTextColor={colors.muted}
-              style={styles.input}
-              value={brand}
-            />
-          </View>
-          <View>
-            <Text style={styles.label}>SKU (optional)</Text>
-            <TextInput
-              accessibilityLabel="SKU"
-              autoCapitalize="characters"
-              onChangeText={setSku}
-              placeholder="e.g. RM10KG"
-              placeholderTextColor={colors.muted}
-              style={styles.input}
-              value={sku}
-            />
-          </View>
-          <View>
-            <Text style={styles.label}>Price</Text>
-            <View style={styles.priceRow}>
-              <TextInput
-                accessibilityLabel="Price"
+      <View style={styles.form}>
+        <Input
+          label="Product name"
+          onChangeText={setName}
+          placeholder="e.g. Roller meal 10kg"
+          value={name}
+        />
+        <Input
+          label="Description"
+          multiline
+          onChangeText={setDescription}
+          placeholder="Optional details buyers should know"
+          style={styles.multiline}
+          value={description}
+        />
+        <Input
+          label="Brand (optional)"
+          onChangeText={setBrand}
+          placeholder="e.g. National Foods"
+          value={brand}
+        />
+        <Input
+          autoCapitalize="characters"
+          label="SKU (optional)"
+          onChangeText={setSku}
+          placeholder="e.g. RM10KG"
+          value={sku}
+        />
+        <View>
+          <Text role="caption" style={styles.label}>
+            Price
+          </Text>
+          <Row align="flex-start" gap={spacing[3]}>
+            <View style={{ flex: 1 }}>
+              <Input
                 keyboardType="decimal-pad"
                 onChangeText={setPrice}
                 placeholder="8.50"
-                placeholderTextColor={colors.muted}
-                style={[styles.input, styles.priceInput]}
                 value={price}
               />
-              <View style={styles.currencyRow}>
-                {(['USD', 'ZWG'] as const).map((code) => (
-                  <Pressable
-                    accessibilityRole="button"
-                    key={code}
-                    onPress={() => setCurrency(code)}
-                    style={[styles.currency, currency === code && styles.currencyActive]}
-                  >
-                    <Text
-                      style={[styles.currencyText, currency === code && styles.currencyTextActive]}
-                    >
-                      {code}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
             </View>
-          </View>
-          <View>
-            <Text style={styles.label}>Starting stock</Text>
-            <TextInput
-              accessibilityLabel="Starting stock"
-              keyboardType="decimal-pad"
-              onChangeText={setStock}
-              placeholder="0"
-              placeholderTextColor={colors.muted}
-              style={styles.input}
-              value={stock}
-            />
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => setListed((value) => !value)}
-            style={styles.toggleRow}
-          >
-            <View style={[styles.toggle, listed && styles.toggleActive]}>
-              <Text style={styles.toggleMark}>{listed ? '✓' : ''}</Text>
-            </View>
-            <Text style={styles.toggleText}>List on Zviripo marketplace</Text>
-          </Pressable>
-
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-
-          <Pressable
-            accessibilityRole="button"
-            disabled={busy}
-            onPress={submit}
-            style={[styles.primary, busy && styles.disabled]}
-          >
-            {busy ? (
-              <ActivityIndicator color={colors.surface} />
-            ) : (
-              <Text style={styles.primaryText}>Save product</Text>
-            )}
-          </Pressable>
+            <Row gap={spacing[2]}>
+              {(['USD', 'ZWG'] as const).map((code) => (
+                <Chip
+                  active={currency === code}
+                  key={code}
+                  label={code}
+                  onPress={() => setCurrency(code)}
+                />
+              ))}
+            </Row>
+          </Row>
         </View>
-      </ScrollView>
-    </SafeAreaView>
+        <Input
+          keyboardType="number-pad"
+          label="Starting stock"
+          onChangeText={setStock}
+          placeholder="0"
+          value={stock}
+        />
+        <Press
+          accessibilityLabel="List on Zviripo marketplace"
+          accessibilityRole="switch"
+          accessibilityState={{ checked: listed }}
+          onPress={() => setListed((value) => !value)}
+          style={styles.toggleRow}
+        >
+          <View style={[styles.toggle, listed && styles.toggleActive]}>
+            {listed ? <Icon color={colors.onDark} name="check" size={16} /> : null}
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text role="body" style={{ fontWeight: '700' }}>
+              List on Zviripo marketplace
+            </Text>
+            <Text role="caption" tone="muted">
+              Buyers nearby can find and contact you about this product.
+            </Text>
+          </View>
+        </Press>
+
+        {error ? (
+          <Text role="bodySm" tone="danger">
+            {error}
+          </Text>
+        ) : null}
+
+        <Button fullWidth label="Save product" loading={busy} onPress={submit} size="lg" />
+      </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.canvas },
-  page: { padding: spacing[5], paddingBottom: spacing[12] },
-  back: { minHeight: 44, alignSelf: 'flex-start', justifyContent: 'center' },
-  backText: { color: colors.brand[700], fontWeight: '900' },
-  eyebrow: {
-    marginTop: spacing[5],
-    color: colors.brand[700],
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1.4,
-  },
-  title: {
-    marginTop: spacing[2],
-    color: colors.ink,
-    fontSize: typography.size.display,
-    lineHeight: typography.lineHeight.display,
-    fontWeight: '900',
-  },
-  description: {
-    marginTop: spacing[3],
-    color: colors.muted,
-    fontSize: typography.size.body,
-    lineHeight: typography.lineHeight.body,
-  },
-  form: { marginTop: spacing[8], gap: spacing[4] },
-  label: { marginBottom: spacing[2], color: colors.ink, fontSize: 12, fontWeight: '800' },
-  input: {
-    minHeight: 54,
-    paddingHorizontal: spacing[4],
+  eyebrow: { marginTop: spacing[5] },
+  title: { marginTop: spacing[1] },
+  description: { marginTop: spacing[2] },
+  form: { marginTop: spacing[6], gap: spacing[4] },
+  label: { marginBottom: spacing[2], fontWeight: '700' },
+  multiline: { minHeight: 100, paddingTop: spacing[3], textAlignVertical: 'top' },
+  toggleRow: {
+    minHeight: 56,
+    padding: spacing[3],
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radii.medium,
-    backgroundColor: colors.surface,
-    color: colors.ink,
-  },
-  multiline: { minHeight: 110, paddingTop: spacing[4], textAlignVertical: 'top' },
-  priceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
-  priceInput: { flex: 1 },
-  currencyRow: { flexDirection: 'row', gap: spacing[2] },
-  currency: {
-    minHeight: 54,
-    paddingHorizontal: spacing[4],
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.medium,
+    borderRadius: radii.md,
     backgroundColor: colors.surface,
   },
-  currencyActive: { borderColor: colors.brand[900], backgroundColor: colors.brand[900] },
-  currencyText: { color: colors.muted, fontWeight: '800' },
-  currencyTextActive: { color: colors.surface },
-  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
   toggle: {
-    width: 30,
-    height: 30,
+    width: 28,
+    height: 28,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: colors.brand[700],
-    borderRadius: radii.small,
+    borderColor: colors.brand.forestDeep,
+    borderRadius: radii.sm,
     backgroundColor: colors.surface,
   },
-  toggleActive: { backgroundColor: colors.brand[700] },
-  toggleMark: { color: colors.surface, fontWeight: '900' },
-  toggleText: { color: colors.ink, fontWeight: '800' },
-  error: { color: colors.danger, fontSize: 13, fontWeight: '700' },
-  primary: {
-    minHeight: 54,
-    marginTop: spacing[3],
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radii.medium,
-    backgroundColor: colors.brand[700],
-  },
-  disabled: { opacity: 0.5 },
-  primaryText: { color: colors.surface, fontWeight: '900' },
+  toggleActive: { backgroundColor: colors.brand.forestDeep },
 });

@@ -1,26 +1,38 @@
-import { colors, radii, spacing, typography } from '@comodities/ui';
+import { colors, copy, radii, spacing, type IconName } from '@comodities/ui';
 import {
   listBusinessProducts,
   type BusinessProduct,
   type Inventory,
+  type Payment,
   type Product,
   type SaleInput,
 } from '@comodities/database';
+import { formatMinor, newOperationId, receiptNumber } from '@comodities/utils';
 import { router } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { Screen } from '../../src/components/screen';
+import { SyncStatus, type SyncPhase } from '../../src/components/sync-status';
 import { useAuth } from '../../src/lib/auth-context';
+import { useConnectivity, useOnReconnect } from '../../src/lib/connectivity';
 import { pendingSaleCount, queueSale, syncPendingSales } from '../../src/lib/offline-pos';
 import { supabase } from '../../src/lib/supabase';
+import { Button } from '../../src/ui/button';
+import { Icon } from '../../src/ui/icon';
+import { Input } from '../../src/ui/input';
+import { Card, Chip, Row } from '../../src/ui/layout';
+import { Press } from '../../src/ui/pressable';
+import { EmptyState, ErrorState, SkeletonRow } from '../../src/ui/states';
+import { Text } from '../../src/ui/text';
+
+type PaymentMethod = Payment['method'];
+
+const methods: Array<{ id: PaymentMethod; label: string; icon: IconName }> = [
+  { id: 'cash', label: 'Cash', icon: 'cash' },
+  { id: 'mobile_money', label: 'Mobile money', icon: 'mobileMoney' },
+  { id: 'card', label: 'Card', icon: 'card' },
+  { id: 'bank_transfer', label: 'Bank transfer', icon: 'receipt' },
+];
 
 interface SaleItem {
   businessProduct: BusinessProduct;
@@ -28,47 +40,33 @@ interface SaleItem {
   inventory: Inventory | undefined;
 }
 
-function formatCurrency(minor: number, currency: 'USD' | 'ZWG') {
-  const amount = minor / 100;
-  return currency === 'USD' ? `$${amount.toFixed(2)}` : `Z$ ${amount.toFixed(2)}`;
-}
-
-function newId() {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
-  });
-}
-
 export default function SellScreen() {
   const { businesses, deviceId } = useAuth();
   const business = businesses[0]?.business ?? null;
+  const connectivity = useConnectivity();
 
   const [items, setItems] = useState<SaleItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const [cart, setCart] = useState<Record<string, number>>({});
   const [query, setQuery] = useState('');
+  const [method, setMethod] = useState<PaymentMethod>('cash');
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState(0);
+  const [phase, setPhase] = useState<SyncPhase>('idle');
 
-  async function refreshPending() {
-    setPending(await pendingSaleCount());
-  }
+  const refreshPending = useCallback(async () => setPending(await pendingSaleCount()), []);
 
-  async function load() {
+  const load = useCallback(async () => {
     if (!business) {
       setLoading(false);
       return;
     }
     setLoading(true);
-    const { data, error } = await listBusinessProducts(supabase, business.id);
-    if (error) {
-      setError(error.message);
-    } else {
+    setError(null);
+    const { data, error: loadError } = await listBusinessProducts(supabase, business.id);
+    if (loadError) setError(loadError);
+    else
       setItems(
         data.map((row) => ({
           businessProduct: row,
@@ -76,15 +74,27 @@ export default function SellScreen() {
           inventory: row.inventory,
         })),
       );
-    }
     setLoading(false);
-  }
+  }, [business]);
+
+  const sync = useCallback(async () => {
+    if (connectivity === 'offline') return;
+    setPhase('syncing');
+    const result = await syncPendingSales();
+    setPhase(result.failed > 0 ? 'failed' : 'idle');
+    setPending(result.pending);
+  }, [connectivity]);
 
   useEffect(() => {
     load();
     refreshPending();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [business?.id]);
+    sync();
+  }, [load, refreshPending, sync]);
+
+  useOnReconnect(() => {
+    sync();
+    load();
+  });
 
   const visible = items.filter((item) =>
     (item.product?.name ?? item.businessProduct.sku ?? '')
@@ -104,7 +114,15 @@ export default function SellScreen() {
     [cart, items],
   );
 
-  const add = (id: string) => setCart((current) => ({ ...current, [id]: (current[id] ?? 0) + 1 }));
+  function setQty(id: string, next: number, stock: number) {
+    setCart((current) => {
+      const clamped = Math.max(0, Math.min(next, stock));
+      const updated = { ...current };
+      if (clamped === 0) delete updated[id];
+      else updated[id] = clamped;
+      return updated;
+    });
+  }
 
   async function record() {
     if (!business || !deviceId || entryCount === 0) return;
@@ -114,8 +132,8 @@ export default function SellScreen() {
     const input: SaleInput = {
       businessId: business.id,
       deviceId,
-      operationId: newId(),
-      receiptNumber: `R-${Date.now()}`,
+      operationId: newOperationId(),
+      receiptNumber: receiptNumber(),
       currencyCode: currency,
       subtotalMinor: totalMinor,
       totalMinor,
@@ -127,36 +145,37 @@ export default function SellScreen() {
         unitPriceMinor: item.businessProduct.price_minor,
         lineTotalMinor: item.businessProduct.price_minor * cart[item.businessProduct.id],
       })),
-      payment: { method: 'cash', amountMinor: totalMinor },
+      payment: { method, amountMinor: totalMinor },
     };
 
     try {
       await queueSale(input);
-      const result = await syncPendingSales();
+      const result =
+        connectivity === 'offline'
+          ? { synced: 0, failed: 1, pending: 1 }
+          : await syncPendingSales();
 
       setBusy(false);
       setCart({});
       await load();
       await refreshPending();
 
-      if (result.failed === 0 && result.synced > 0) {
-        Alert.alert('Sale recorded', 'Stock has been updated and the sale is synced.');
+      if (result.synced > 0 && result.failed === 0) {
+        Alert.alert(copy.sale.recordedSynced.title, copy.sale.recordedSynced.detail);
       } else {
-        Alert.alert(
-          'Sale saved on this device',
-          'It is safe and will sync automatically when connectivity returns.',
-        );
+        Alert.alert(copy.sale.recordedLocal.title, copy.sale.recordedLocal.detail);
       }
     } catch (queueError) {
       setBusy(false);
-      Alert.alert('Sale failed', String(queueError));
+      Alert.alert(copy.error.save.title, String(queueError));
     }
   }
 
+  const methodLabel = methods.find((m) => m.id === method)?.label ?? method;
   const reviewSale = () => {
     Alert.alert(
       'Record this sale?',
-      `${entryCount} items · ${formatCurrency(totalMinor, currency)} · Cash`,
+      `${entryCount} ${entryCount === 1 ? 'item' : 'items'} · ${formatMinor(totalMinor, currency)} · ${methodLabel}`,
       [
         { text: 'Keep editing', style: 'cancel' },
         { text: 'Record sale', onPress: record },
@@ -167,10 +186,12 @@ export default function SellScreen() {
   if (!business) {
     return (
       <Screen>
-        <Text style={styles.title}>Set up your business first</Text>
-        <Pressable onPress={() => router.push('/(merchant)/setup')} style={styles.checkoutButton}>
-          <Text style={styles.checkoutText}>Create business</Text>
-        </Pressable>
+        <EmptyState
+          action={{ label: 'Create my business', onPress: () => router.push('/(merchant)/setup') }}
+          detail="Your sales are tied to a business. Set it up to start selling."
+          icon="business"
+          title="Set up your business first"
+        />
       </Screen>
     );
   }
@@ -179,101 +200,156 @@ export default function SellScreen() {
     <Screen
       footer={
         <View style={styles.checkout}>
-          <View>
-            <Text style={styles.checkoutLabel}>{entryCount} items</Text>
-            <Text style={styles.checkoutTotal}>{formatCurrency(totalMinor, currency)}</Text>
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            disabled={!entryCount || busy}
-            onPress={reviewSale}
-            style={[styles.checkoutButton, (!entryCount || busy) && styles.disabled]}
-          >
-            {busy ? (
-              <ActivityIndicator color={colors.surface} />
-            ) : (
-              <Text style={styles.checkoutText}>Review sale</Text>
-            )}
-          </Pressable>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.methodScroll}>
+            <Row gap={spacing[2]}>
+              {methods.map((m) => (
+                <Chip
+                  active={method === m.id}
+                  icon={m.icon}
+                  key={m.id}
+                  label={m.label}
+                  onPress={() => setMethod(m.id)}
+                />
+              ))}
+            </Row>
+          </ScrollView>
+          <Row justify="space-between" style={styles.checkoutRow}>
+            <View>
+              <Text role="caption" tone="muted">
+                {entryCount} {entryCount === 1 ? 'item' : 'items'} · {methodLabel}
+              </Text>
+              <Text role="headingLg">{formatMinor(totalMinor, currency)}</Text>
+            </View>
+            <Button
+              disabled={!entryCount}
+              label="Record sale"
+              loading={busy}
+              onPress={reviewSale}
+              size="lg"
+              variant="gold"
+            />
+          </Row>
         </View>
       }
+      onRefresh={async () => {
+        await sync();
+        await load();
+      }}
     >
-      <View style={styles.header}>
+      <Row justify="space-between" style={styles.header}>
         <View>
-          <Text style={styles.eyebrow}>NEW SALE</Text>
-          <Text style={styles.title}>Sell</Text>
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          onPress={async () => {
-            await syncPendingSales();
-            await refreshPending();
-            await load();
-          }}
-        >
-          <Text style={[styles.offline, pending > 0 && styles.pendingPill]}>
-            {pending > 0 ? `${pending} to sync` : 'All synced'}
+          <Text role="label" tone="brand">
+            NEW SALE
           </Text>
-        </Pressable>
+          <Text role="headingXl">Sell</Text>
+        </View>
+        <SyncStatus connectivity={connectivity} onPress={sync} pending={pending} phase={phase} />
+      </Row>
+
+      <View style={styles.search}>
+        <Input
+          icon="search"
+          onChangeText={setQuery}
+          placeholder="Search product or SKU"
+          value={query}
+        />
       </View>
-      <TextInput
-        accessibilityLabel="Find a product"
-        placeholder="Search product or SKU"
-        placeholderTextColor={colors.muted}
-        value={query}
-        onChangeText={setQuery}
-        style={styles.search}
-      />
+
       {loading ? (
-        <Text style={styles.empty}>Loading inventory…</Text>
-      ) : error ? (
-        <Text style={styles.empty}>{error}</Text>
-      ) : visible.length === 0 ? (
-        <View>
-          <Text style={styles.empty}>
-            No products yet. Add your first product to start selling.
-          </Text>
-          <Pressable onPress={() => router.push('/(merchant)/add-product')} style={styles.addCta}>
-            <Text style={styles.addCtaText}>Add a product</Text>
-          </Pressable>
+        <View style={styles.list}>
+          <SkeletonRow />
+          <SkeletonRow />
+          <SkeletonRow />
         </View>
+      ) : error ? (
+        <ErrorState error={error} onRetry={load} />
+      ) : visible.length === 0 ? (
+        <EmptyState
+          action={
+            query
+              ? undefined
+              : {
+                  label: copy.empty.inventory.action,
+                  onPress: () => router.push('/(merchant)/add-product'),
+                }
+          }
+          detail={query ? 'Try a different name or SKU.' : copy.empty.inventory.detail}
+          icon="inventory"
+          title={query ? `Nothing matches “${query}”` : copy.empty.inventory.title}
+        />
       ) : (
-        <View style={styles.products}>
+        <View style={styles.list}>
           {visible.map((item) => {
             const id = item.businessProduct.id;
             const stock = item.inventory?.quantity ?? 0;
+            const qty = cart[id] ?? 0;
+            const soldOut = stock <= 0;
             return (
-              <Pressable
-                accessibilityRole="button"
-                key={id}
-                onPress={() => add(id)}
-                style={styles.product}
-              >
-                <View style={styles.productImage}>
-                  <Text style={styles.productInitial}>
-                    {(item.product?.name ?? item.businessProduct.sku ?? '?')[0]}
-                  </Text>
-                </View>
-                <View style={styles.productBody}>
-                  <Text style={styles.productName}>
-                    {item.product?.name ?? item.businessProduct.sku ?? 'Unnamed'}
-                  </Text>
-                  <Text style={styles.stock}>{stock} in stock</Text>
-                </View>
-                <View style={styles.priceBlock}>
-                  <Text style={styles.price}>
-                    {formatCurrency(
-                      item.businessProduct.price_minor,
-                      item.businessProduct.currency_code,
+              <Card key={id} style={styles.product}>
+                <Row>
+                  <View style={styles.productImage}>
+                    <Text role="headingMd" tone="brand">
+                      {(item.product?.name ?? item.businessProduct.sku ?? '?')[0]}
+                    </Text>
+                  </View>
+                  <View style={styles.productBody}>
+                    <Text numberOfLines={1} role="headingSm">
+                      {item.product?.name ?? item.businessProduct.sku ?? 'Unnamed'}
+                    </Text>
+                    <Text
+                      role="caption"
+                      tone={soldOut ? 'danger' : stock <= 3 ? 'warning' : 'muted'}
+                    >
+                      {soldOut ? 'Out of stock' : `${stock} in stock`}
+                    </Text>
+                  </View>
+                  <View style={styles.priceBlock}>
+                    <Text role="headingSm">
+                      {formatMinor(
+                        item.businessProduct.price_minor,
+                        item.businessProduct.currency_code,
+                      )}
+                    </Text>
+                    {qty > 0 ? (
+                      <Row gap={spacing[2]}>
+                        <Press
+                          accessibilityLabel={`Remove one ${item.product?.name ?? 'item'}`}
+                          accessibilityRole="button"
+                          onPress={() => setQty(id, qty - 1, stock)}
+                          style={styles.stepper}
+                        >
+                          <Icon color={colors.ink} name="remove" size={16} />
+                        </Press>
+                        <Text role="headingSm" style={styles.qty}>
+                          {qty}
+                        </Text>
+                        <Press
+                          accessibilityLabel={`Add one ${item.product?.name ?? 'item'}`}
+                          accessibilityRole="button"
+                          disabled={qty >= stock}
+                          onPress={() => setQty(id, qty + 1, stock)}
+                          style={[styles.stepper, qty >= stock && styles.stepperDisabled]}
+                        >
+                          <Icon color={colors.ink} name="add" size={16} />
+                        </Press>
+                      </Row>
+                    ) : (
+                      <Press
+                        accessibilityLabel={`Add ${item.product?.name ?? 'item'} to sale`}
+                        accessibilityRole="button"
+                        accessibilityState={{ disabled: soldOut }}
+                        disabled={soldOut}
+                        onPress={() => setQty(id, 1, stock)}
+                        style={[styles.addButton, soldOut && styles.stepperDisabled]}
+                      >
+                        <Text role="caption" tone="brand" style={{ fontWeight: '800' }}>
+                          {soldOut ? 'Sold out' : 'Add'}
+                        </Text>
+                      </Press>
                     )}
-                  </Text>
-                  {cart[id] ? (
-                    <View style={styles.quantity}>
-                      <Text style={styles.quantityText}>{cart[id]}</Text>
-                    </View>
-                  ) : null}
-                </View>
-              </Pressable>
+                  </View>
+                </Row>
+              </Card>
             );
           })}
         </View>
@@ -283,99 +359,50 @@ export default function SellScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: {
-    marginTop: spacing[2],
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  eyebrow: { color: colors.brand[700], fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
-  title: { color: colors.ink, fontSize: typography.size.display, fontWeight: '900' },
-  offline: {
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[2],
-    color: colors.success,
-    borderRadius: radii.pill,
-    backgroundColor: colors.brand[100],
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  pendingPill: { color: colors.warning, backgroundColor: '#fff0d8' },
-  search: {
-    minHeight: 56,
-    marginTop: spacing[5],
-    paddingHorizontal: spacing[4],
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.medium,
-    backgroundColor: colors.surface,
-    color: colors.ink,
-    fontSize: typography.size.body,
-  },
-  empty: { marginTop: spacing[8], color: colors.muted, textAlign: 'center' },
-  addCta: {
-    minHeight: 50,
-    marginTop: spacing[4],
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radii.medium,
-    backgroundColor: colors.brand[700],
-  },
-  addCtaText: { color: colors.surface, fontWeight: '900' },
-  products: { marginTop: spacing[5], gap: spacing[3] },
-  product: {
-    minHeight: 78,
-    padding: spacing[3],
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.medium,
-    backgroundColor: colors.surface,
-  },
+  header: { marginTop: spacing[2] },
+  search: { marginTop: spacing[5] },
+  list: { marginTop: spacing[5], gap: spacing[3] },
+  product: { padding: spacing[3] },
   productImage: {
-    width: 54,
-    height: 54,
+    width: 52,
+    height: 52,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: radii.small,
-    backgroundColor: colors.brand[100],
+    borderRadius: radii.sm,
+    backgroundColor: colors.brand.tint,
   },
-  productInitial: { color: colors.brand[700], fontSize: 20, fontWeight: '900' },
   productBody: { flex: 1, marginLeft: spacing[3] },
-  productName: { color: colors.ink, fontWeight: '800' },
-  stock: { marginTop: spacing[1], color: colors.muted, fontSize: 11 },
-  priceBlock: { alignItems: 'flex-end', gap: spacing[1] },
-  price: { color: colors.ink, fontSize: 17, fontWeight: '900' },
-  quantity: {
-    width: 24,
-    height: 24,
+  priceBlock: { alignItems: 'flex-end', gap: spacing[2] },
+  addButton: {
+    minHeight: 36,
+    paddingHorizontal: spacing[4],
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radii.pill,
-    backgroundColor: colors.brand[500],
+    backgroundColor: colors.brand.tint,
   },
-  quantityText: { color: colors.brand[900], fontSize: 11, fontWeight: '900' },
-  checkout: {
-    padding: spacing[4],
-    paddingBottom: spacing[5],
-    flexDirection: 'row',
+  stepper: {
+    width: 32,
+    height: 32,
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  stepperDisabled: { opacity: 0.4 },
+  qty: { minWidth: 20, textAlign: 'center' },
+  checkout: {
+    paddingTop: spacing[3],
+    paddingBottom: spacing[4],
     borderTopWidth: 1,
     borderTopColor: colors.border,
     backgroundColor: colors.surface,
   },
-  checkoutLabel: { color: colors.muted, fontSize: 11 },
-  checkoutTotal: { color: colors.ink, fontSize: 21, fontWeight: '900' },
-  checkoutButton: {
-    minWidth: 170,
-    minHeight: 50,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radii.medium,
-    backgroundColor: colors.brand[700],
+  methodScroll: { flexGrow: 0, paddingHorizontal: spacing[5] },
+  checkoutRow: {
+    marginTop: spacing[3],
+    paddingHorizontal: spacing[5],
   },
-  disabled: { opacity: 0.35 },
-  checkoutText: { color: colors.surface, fontWeight: '900' },
 });

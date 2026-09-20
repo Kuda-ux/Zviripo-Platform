@@ -13,6 +13,7 @@
   "dependencies": {
     "@comodities/database": "workspace:*",
     "@comodities/ui": "workspace:*",
+    "@comodities/utils": "workspace:*",
     "@expo/vector-icons": "15.1.1",
     "expo": "57.0.22",
     "expo-haptics": "57.0.3",

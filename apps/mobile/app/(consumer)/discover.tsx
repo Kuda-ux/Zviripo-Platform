@@ -1,156 +1,213 @@
-import { colors, radii, spacing, typography } from '@comodities/ui';
-import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { ProductCard } from '../../src/components/product-card';
-import { Screen } from '../../src/components/screen';
-import { fetchMarketplace } from '../../src/lib/marketplace';
-import type { ProductPreview } from '../../src/data/demo';
+import type { MarketplaceListing } from '@comodities/database';
+import { colors, copy, radii, spacing } from '@comodities/ui';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { FlatList, StyleSheet, View } from 'react-native';
+import { BusinessCard, ProductCard } from '../../src/components/commerce';
+import { Screen, screenPadding } from '../../src/components/screen';
+import { businessesFrom, fetchMarketplace } from '../../src/lib/marketplace';
+import { clearRecentSearches, recentSearches, rememberSearch } from '../../src/lib/recent-searches';
+import { Input } from '../../src/ui/input';
+import { Chip, Row } from '../../src/ui/layout';
+import { Press } from '../../src/ui/pressable';
+import { EmptyState, ErrorState, Skeleton } from '../../src/ui/states';
+import { Text } from '../../src/ui/text';
 
-const FILTERS = ['All', 'Products', 'Shops', 'Services', 'Jobs', 'Requests'];
+type Kind = 'All' | 'Products' | 'Shops' | 'Services' | 'Jobs' | 'Requests';
+const KINDS: Kind[] = ['All', 'Products', 'Shops', 'Services', 'Jobs', 'Requests'];
+const LIVE_KINDS: Kind[] = ['All', 'Products', 'Shops'];
 
 export default function DiscoverScreen() {
-  const [activeFilter, setActiveFilter] = useState('All');
-  const [query, setQuery] = useState('');
-  const [items, setItems] = useState<ProductPreview[]>([]);
+  const params = useLocalSearchParams<{ q?: string }>();
+  const [kind, setKind] = useState<Kind>('All');
+  const [draft, setDraft] = useState(params.q ?? '');
+  const [query, setQuery] = useState(params.q ?? '');
+  const [listings, setListings] = useState<MarketplaceListing[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [recent, setRecent] = useState<string[]>([]);
 
-  async function load(search?: string) {
+  const load = useCallback(async (q: string) => {
     setLoading(true);
-    const { items, error } = await fetchMarketplace(search);
-    setItems(items);
-    setError(error);
+    const result = await fetchMarketplace(q || undefined, 60);
+    setListings(result.listings);
+    setError(result.error);
     setLoading(false);
-  }
-
-  useEffect(() => {
-    load();
   }, []);
 
-  const searched = query.trim().length > 0;
+  useEffect(() => {
+    load(query);
+  }, [query, load]);
+
+  useEffect(() => {
+    recentSearches().then(setRecent);
+  }, [query]);
+
+  useEffect(() => {
+    if (params.q !== undefined) {
+      setDraft(params.q);
+      setQuery(params.q);
+    }
+  }, [params.q]);
+
+  const submit = (value = draft) => {
+    const q = value.trim();
+    setDraft(q);
+    setQuery(q);
+    if (q) rememberSearch(q);
+  };
+
+  const shops = useMemo(() => businessesFrom(listings), [listings]);
+  const showProducts = kind === 'All' || kind === 'Products';
+  const showShops = kind === 'All' || kind === 'Shops';
+  const comingSoon = !LIVE_KINDS.includes(kind);
+  const empty = !loading && !error && listings.length === 0;
+
+  const header = (
+    <View style={styles.header}>
+      <Text role="label" tone="brand">
+        DISCOVER
+      </Text>
+      <Text role="headingXl" style={styles.title}>
+        Find it nearby.
+      </Text>
+      <View style={styles.search}>
+        <Input
+          autoCorrect={false}
+          icon="search"
+          onChangeText={setDraft}
+          onSubmitEditing={() => submit()}
+          placeholder="Products, shops, services, jobs…"
+          prominent
+          returnKeyType="search"
+          value={draft}
+        />
+      </View>
+      <Row gap={spacing[2]} style={styles.chips}>
+        {KINDS.map((k) => (
+          <Chip active={kind === k} key={k} label={k} onPress={() => setKind(k)} />
+        ))}
+      </Row>
+
+      {!query && recent.length > 0 ? (
+        <View style={styles.recent}>
+          <Row justify="space-between">
+            <Text role="caption" tone="muted">
+              Recent searches
+            </Text>
+            <Press
+              accessibilityRole="button"
+              onPress={async () => {
+                await clearRecentSearches();
+                setRecent([]);
+              }}
+              style={styles.clear}
+            >
+              <Text role="caption" tone="brand">
+                Clear
+              </Text>
+            </Press>
+          </Row>
+          <Row gap={spacing[2]} style={styles.recentChips}>
+            {recent.map((r) => (
+              <Chip key={r} label={r} onPress={() => submit(r)} />
+            ))}
+          </Row>
+        </View>
+      ) : null}
+
+      {comingSoon ? (
+        <EmptyState
+          detail={`${kind} are not on Zviripo yet. ${copy.comingSoon.detail} Meanwhile, you can post what you need.`}
+          icon={kind === 'Services' ? 'services' : kind === 'Jobs' ? 'opportunities' : 'request'}
+          style={styles.block}
+          title={`${kind} — ${copy.comingSoon.label.toLowerCase()}`}
+          action={{
+            label: 'Post a request',
+            onPress: () => router.push('/action/request'),
+            variant: 'gold',
+          }}
+        />
+      ) : loading ? (
+        <View style={styles.block}>
+          <Skeleton height={14} width={160} />
+          <Row gap={spacing[3]} style={{ marginTop: spacing[3] }}>
+            <Skeleton height={228} radius={radii.lg} width="48%" />
+            <Skeleton height={228} radius={radii.lg} width="48%" />
+          </Row>
+        </View>
+      ) : error ? (
+        <ErrorState error={error} onRetry={() => load(query)} style={styles.block} />
+      ) : empty ? (
+        <EmptyState
+          action={{
+            label: copy.empty.search(query).action,
+            onPress: () => router.push('/action/request'),
+            variant: 'gold',
+          }}
+          detail={query ? copy.empty.search(query).detail : copy.empty.marketplace.detail}
+          icon="request"
+          style={styles.block}
+          title={query ? copy.empty.search(query).title : copy.empty.marketplace.title}
+        />
+      ) : (
+        <>
+          {showShops && shops.length > 0 ? (
+            <View style={styles.block}>
+              <Text role="caption" tone="muted">
+                {shops.length} {shops.length === 1 ? 'shop' : 'shops'}
+              </Text>
+              <FlatList
+                contentContainerStyle={{ gap: spacing[3], paddingTop: spacing[3] }}
+                data={shops}
+                horizontal
+                keyExtractor={(s) => s.id}
+                renderItem={({ item }) => (
+                  <BusinessCard business={item} onPress={() => submit(item.name)} />
+                )}
+                showsHorizontalScrollIndicator={false}
+              />
+            </View>
+          ) : null}
+          {showProducts ? (
+            <Text role="caption" tone="muted" style={styles.count}>
+              {listings.length} {listings.length === 1 ? 'product' : 'products'}
+              {query ? ` for “${query}”` : ' around you'}
+            </Text>
+          ) : null}
+        </>
+      )}
+    </View>
+  );
 
   return (
-    <Screen>
-      <Text style={styles.eyebrow}>DISCOVER</Text>
-      <Text style={styles.title}>Find it nearby.</Text>
-      <TextInput
-        accessibilityLabel="Search Zviripo"
-        placeholder="Products, shops, services, jobs…"
-        placeholderTextColor={colors.muted}
-        value={query}
-        onChangeText={setQuery}
-        onSubmitEditing={() => load(query)}
-        returnKeyType="search"
-        style={styles.search}
+    <Screen scroll={false}>
+      <FlatList
+        columnWrapperStyle={styles.columns}
+        contentContainerStyle={styles.content}
+        data={showProducts && !comingSoon && !loading && !error ? listings : []}
+        initialNumToRender={8}
+        keyExtractor={(l) => l.listing_id}
+        keyboardShouldPersistTaps="handled"
+        ListHeaderComponent={header}
+        numColumns={2}
+        renderItem={({ item }) => <ProductCard fluid listing={item} />}
+        windowSize={7}
       />
-      <View style={styles.filters}>
-        {FILTERS.map((filter) => (
-          <Pressable
-            accessibilityRole="button"
-            key={filter}
-            onPress={() => setActiveFilter(filter)}
-            style={[styles.filter, activeFilter === filter && styles.filterActive]}
-          >
-            <Text style={[styles.filterText, activeFilter === filter && styles.filterTextActive]}>
-              {filter}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-      {loading ? (
-        <Text style={styles.resultCount}>Searching Zviripo…</Text>
-      ) : error ? (
-        <Text style={styles.resultCount}>{error}</Text>
-      ) : items.length === 0 ? (
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>
-            {searched ? `Can’t find “${query.trim()}” nearby?` : 'Nothing nearby yet.'}
-          </Text>
-          <Text style={styles.emptyBody}>
-            Post a request — shops and providers near you can respond with what they have.
-          </Text>
-          <Pressable onPress={() => router.push('/action/request')} style={styles.emptyCta}>
-            <Text style={styles.emptyCtaText}>Post a request</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <Text style={styles.resultCount}>
-          {items.length} {activeFilter.toLowerCase()} results around you
-        </Text>
-      )}
-      <View style={styles.results}>
-        {items.map((product) => (
-          <ProductCard key={product.id} product={product} />
-        ))}
-      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  eyebrow: {
-    marginTop: spacing[4],
-    color: colors.brand[700],
-    fontSize: typography.size.caption,
-    fontWeight: '900',
-    letterSpacing: 1.4,
-  },
-  title: {
-    marginTop: spacing[2],
-    color: colors.ink,
-    fontSize: typography.size.display,
-    fontWeight: '900',
-    letterSpacing: -1.2,
-  },
-  search: {
-    minHeight: 60,
-    marginTop: spacing[5],
-    paddingHorizontal: spacing[4],
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.medium,
-    backgroundColor: colors.surface,
-    color: colors.ink,
-    fontSize: typography.size.body,
-  },
-  filters: { marginTop: spacing[4], flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2] },
-  filter: {
-    minHeight: 40,
-    paddingHorizontal: spacing[3],
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surface,
-  },
-  filterActive: { borderColor: colors.brand[900], backgroundColor: colors.brand[900] },
-  filterText: { color: colors.muted, fontSize: typography.size.caption, fontWeight: '800' },
-  filterTextActive: { color: colors.surface },
-  resultCount: {
-    marginVertical: spacing[5],
-    color: colors.muted,
-    fontSize: typography.size.caption,
-    fontWeight: '700',
-  },
-  emptyCard: {
-    marginVertical: spacing[5],
-    padding: spacing[5],
-    alignItems: 'flex-start',
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.medium,
-    backgroundColor: colors.surface,
-  },
-  emptyTitle: { color: colors.ink, fontWeight: '900', fontSize: 17 },
-  emptyBody: { marginTop: spacing[1], color: colors.muted, fontSize: 13, lineHeight: 19 },
-  emptyCta: {
-    marginTop: spacing[4],
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[3],
-    borderRadius: radii.medium,
-    backgroundColor: colors.brand[700],
-  },
-  emptyCtaText: { color: colors.surface, fontWeight: '900' },
-  results: { gap: spacing[4], alignItems: 'center' },
+  content: { ...screenPadding, paddingTop: spacing[4], paddingBottom: spacing[16] },
+  header: { marginBottom: spacing[3] },
+  title: { marginTop: spacing[2] },
+  search: { marginTop: spacing[4] },
+  chips: { marginTop: spacing[3], flexWrap: 'wrap' },
+  recent: { marginTop: spacing[4] },
+  recentChips: { marginTop: spacing[2], flexWrap: 'wrap' },
+  clear: { minHeight: 32, justifyContent: 'center' },
+  block: { marginTop: spacing[5] },
+  count: { marginTop: spacing[5] },
+  columns: { gap: spacing[3], marginBottom: spacing[3] },
 });

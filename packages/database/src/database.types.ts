@@ -372,6 +372,8 @@ export interface Database {
           product_active: boolean;
           created_at: string;
           updated_at: string;
+          /** Added by 202609200002; undefined until that migration is applied. */
+          business_phone?: string | null;
         };
       };
     };

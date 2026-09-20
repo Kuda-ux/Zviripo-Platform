@@ -1,65 +1,200 @@
-import { colors, radii, spacing, typography } from '@comodities/ui';
-import { StyleSheet, Text, View } from 'react-native';
+import { colors, copy, radii, spacing } from '@comodities/ui';
+import { getSales, type Payment } from '@comodities/database';
+import { formatMinor } from '@comodities/utils';
+import { router } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 import { Screen } from '../../src/components/screen';
-import { SyncPill } from '../../src/components/sync-pill';
+import { SyncStatus, type SyncPhase } from '../../src/components/sync-status';
+import { useAuth } from '../../src/lib/auth-context';
+import { useConnectivity, useOnReconnect } from '../../src/lib/connectivity';
+import { pendingSaleCount, syncPendingSales } from '../../src/lib/offline-pos';
+import { supabase } from '../../src/lib/supabase';
+import { Icon } from '../../src/ui/icon';
+import { Card, Row } from '../../src/ui/layout';
+import { EmptyState, ErrorState, SkeletonRow } from '../../src/ui/states';
+import { Text } from '../../src/ui/text';
 
-const activity = [
-  ['Sale #1048', '$12.40 · Cash · 4 items', '10:42'],
-  ['Credit repayment', '$5.00 · Rudo M.', '09:18'],
-  ['Sale #1047', '$7.20 · Mobile money', '08:55'],
-];
+type SaleRow = Awaited<ReturnType<typeof getSales>>['data'][number];
+
+const methodLabels: Record<Payment['method'], string> = {
+  cash: 'Cash',
+  mobile_money: 'Mobile money',
+  card: 'Card',
+  bank_transfer: 'Bank transfer',
+  credit: 'On Book',
+  other: 'Other',
+};
+
+function isToday(iso: string) {
+  const d = new Date(iso);
+  const t = new Date();
+  return (
+    d.getFullYear() === t.getFullYear() &&
+    d.getMonth() === t.getMonth() &&
+    d.getDate() === t.getDate()
+  );
+}
+
+function timeOf(iso: string) {
+  const d = new Date(iso);
+  return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+}
 
 export default function MerchantActivity() {
+  const { businesses } = useAuth();
+  const business = businesses[0]?.business ?? null;
+  const connectivity = useConnectivity();
+
+  const [sales, setSales] = useState<SaleRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<unknown>(null);
+  const [pending, setPending] = useState(0);
+  const [phase, setPhase] = useState<SyncPhase>('idle');
+
+  const sync = useCallback(async () => {
+    if (connectivity === 'offline') return;
+    setPhase('syncing');
+    const result = await syncPendingSales();
+    setPhase(result.failed > 0 ? 'failed' : 'idle');
+    setPending(result.pending);
+  }, [connectivity]);
+
+  const load = useCallback(async () => {
+    setPending(await pendingSaleCount());
+    if (!business) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    const { data, error: loadError } = await getSales(supabase, business.id, 100);
+    if (loadError) setError(loadError);
+    else setSales(data);
+    setLoading(false);
+  }, [business]);
+
+  useEffect(() => {
+    load();
+    sync();
+  }, [load, sync]);
+
+  useOnReconnect(() => {
+    sync();
+    load();
+  });
+
+  if (!business) {
+    return (
+      <Screen>
+        <EmptyState
+          action={{ label: 'Create my business', onPress: () => router.push('/(merchant)/setup') }}
+          detail="Your sales history is tied to a business. Set it up first."
+          icon="business"
+          title="Set up your business first"
+        />
+      </Screen>
+    );
+  }
+
+  const today = sales.filter((s) => isToday(s.occurred_at));
+  const earlier = sales.filter((s) => !isToday(s.occurred_at));
+
+  const renderRow = (sale: SaleRow) => {
+    const items = (sale.sale_items as { quantity: number }[] | undefined) ?? [];
+    const count = items.reduce((sum, item) => sum + Number(item.quantity), 0);
+    const payments = (sale.payments as Payment[] | undefined) ?? [];
+    const method = payments[0]?.method ? methodLabels[payments[0].method] : 'Sale';
+    return (
+      <View key={sale.id} style={styles.row}>
+        <View style={styles.icon}>
+          <Icon color={colors.success} name="check" size={18} />
+        </View>
+        <View style={styles.body}>
+          <Text role="headingSm">{sale.receipt_number ?? 'Sale'}</Text>
+          <Text role="caption" tone="muted" style={{ marginTop: spacing[1] }}>
+            {formatMinor(sale.total_minor, sale.currency_code)} · {method} · {count}{' '}
+            {count === 1 ? 'item' : 'items'}
+          </Text>
+        </View>
+        <Text role="caption" tone="muted">
+          {timeOf(sale.occurred_at)}
+        </Text>
+      </View>
+    );
+  };
+
   return (
-    <Screen>
-      <View style={styles.header}>
-        <Text style={styles.title}>Activity</Text>
-        <SyncPill />
-      </View>
-      <Text style={styles.date}>TODAY</Text>
-      <View style={styles.list}>
-        {activity.map(([title, detail, time]) => (
-          <View key={title} style={styles.row}>
-            <View style={styles.icon}>
-              <Text style={styles.iconText}>✓</Text>
-            </View>
-            <View style={styles.body}>
-              <Text style={styles.rowTitle}>{title}</Text>
-              <Text style={styles.detail}>{detail}</Text>
-            </View>
-            <Text style={styles.time}>{time}</Text>
-          </View>
-        ))}
-      </View>
+    <Screen
+      onRefresh={async () => {
+        await sync();
+        await load();
+      }}
+    >
+      <Row justify="space-between" style={styles.header}>
+        <View>
+          <Text role="label" tone="brand">
+            HISTORY
+          </Text>
+          <Text role="headingXl">Activity</Text>
+        </View>
+        <SyncStatus connectivity={connectivity} onPress={sync} pending={pending} phase={phase} />
+      </Row>
+
+      {loading ? (
+        <View style={styles.list}>
+          <SkeletonRow />
+          <SkeletonRow />
+          <SkeletonRow />
+        </View>
+      ) : error ? (
+        <ErrorState error={error} onRetry={load} />
+      ) : sales.length === 0 ? (
+        <EmptyState
+          action={{
+            label: copy.empty.sales.action,
+            onPress: () => router.push('/(merchant)/sell'),
+          }}
+          detail={copy.empty.sales.detail}
+          icon="receipt"
+          title={copy.empty.sales.title}
+        />
+      ) : (
+        <>
+          <Text role="label" tone="muted" style={styles.date}>
+            TODAY
+          </Text>
+          <Card style={styles.group}>
+            {today.length > 0 ? (
+              today.map(renderRow)
+            ) : (
+              <Text role="bodySm" tone="muted" style={styles.groupEmpty}>
+                {copy.empty.sales.detail}
+              </Text>
+            )}
+          </Card>
+          {earlier.length > 0 ? (
+            <>
+              <Text role="label" tone="muted" style={styles.date}>
+                EARLIER
+              </Text>
+              <Card style={styles.group}>{earlier.map(renderRow)}</Card>
+            </>
+          ) : null}
+        </>
+      )}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  header: {
-    marginTop: spacing[3],
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  title: { color: colors.ink, fontSize: typography.size.display, fontWeight: '900' },
-  date: {
-    marginTop: spacing[8],
-    marginBottom: spacing[3],
-    color: colors.muted,
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1.2,
-  },
-  list: {
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.large,
-    backgroundColor: colors.surface,
-  },
+  header: { marginTop: spacing[2] },
+  list: { marginTop: spacing[5], gap: spacing[3] },
+  date: { marginTop: spacing[6], marginBottom: spacing[3] },
+  group: { padding: 0, overflow: 'hidden' },
+  groupEmpty: { padding: spacing[4] },
   row: {
-    minHeight: 78,
+    minHeight: 72,
     paddingHorizontal: spacing[4],
     flexDirection: 'row',
     alignItems: 'center',
@@ -72,11 +207,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radii.pill,
-    backgroundColor: colors.brand[100],
+    backgroundColor: colors.successSoft,
   },
-  iconText: { color: colors.success, fontWeight: '900' },
   body: { flex: 1, marginLeft: spacing[3] },
-  rowTitle: { color: colors.ink, fontWeight: '900' },
-  detail: { marginTop: spacing[1], color: colors.muted, fontSize: 11 },
-  time: { color: colors.muted, fontSize: 11 },
 });

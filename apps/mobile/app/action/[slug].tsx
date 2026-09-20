@@ -1,214 +1,195 @@
-import { colors, radii, spacing, typography } from '@comodities/ui';
+import { colors, copy, spacing, type IconName } from '@comodities/ui';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
-import {
-  Pressable,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { Screen } from '../../src/components/screen';
+import { useAuth } from '../../src/lib/auth-context';
+import { Button } from '../../src/ui/button';
+import { Icon } from '../../src/ui/icon';
+import { Card, IconButton, Row } from '../../src/ui/layout';
+import { Input } from '../../src/ui/input';
+import { Text } from '../../src/ui/text';
 
-const labels: Record<
-  string,
-  { title: string; description: string; fields: string[]; submit: string }
-> = {
+interface Flow {
+  title: string;
+  description: string;
+  icon: IconName;
+  fields: string[];
+  /** A real destination that exists today, if any. */
+  live?: { label: string; href: string; detail: string };
+}
+
+const flows: Record<string, Flow> = {
   sell: {
-    title: 'Sell something',
-    description: 'Create a local listing buyers can understand quickly.',
-    fields: ['What are you selling?', 'Price', 'Area', 'Description'],
-    submit: 'Review listing',
+    title: 'Sell on Zviripo',
+    description:
+      'Selling happens through your business: add products, set prices, list them for buyers.',
+    icon: 'sell',
+    fields: [],
+    live: {
+      label: 'Open my business',
+      href: '/(merchant)',
+      detail: 'Add a product and toggle “List on Zviripo”.',
+    },
   },
   request: {
     title: 'Post a request',
-    description: 'Tell nearby businesses or providers exactly what you need.',
-    fields: ['What do you need?', 'Optional budget', 'Area', 'When do you need it?'],
-    submit: 'Review request',
+    description:
+      'Tell nearby businesses and providers exactly what you need, your area and budget.',
+    icon: 'request',
+    fields: ['What do you need?', 'Your area', 'Budget (optional)', 'When do you need it?'],
   },
   services: {
     title: 'Find a service',
     description: 'Describe the job and connect with relevant local providers.',
-    fields: ['Service needed', 'Area', 'Preferred date', 'Describe the work'],
-    submit: 'Find providers',
+    icon: 'services',
+    fields: ['Service needed', 'Your area', 'Describe the work'],
   },
   'offer-service': {
     title: 'Offer a service',
-    description: 'Make your skills discoverable to local customers.',
-    fields: [
-      'Service category',
-      'Business or display name',
-      'Areas covered',
-      'Describe your service',
-    ],
-    submit: 'Review service',
+    description: 'Make your skills discoverable to customers near you.',
+    icon: 'services',
+    fields: ['Service category', 'Areas you cover', 'Describe your service'],
   },
   'add-stock': {
     title: 'Add stock',
-    description: 'Update quantity while keeping a clear inventory record.',
-    fields: ['Product', 'Quantity received', 'Unit cost (optional)', 'Supplier note (optional)'],
-    submit: 'Add stock',
+    description: 'Stock adjustments live in Inventory, with a full movement record.',
+    icon: 'inventory',
+    fields: [],
+    live: {
+      label: 'Open inventory',
+      href: '/(merchant)/inventory',
+      detail: 'Use + on any product.',
+    },
   },
   customers: {
     title: 'Customers',
-    description: 'Find a customer or add a simple customer record.',
-    fields: ['Search by name or phone'],
-    submit: 'Add customer',
+    description: 'Customer records and store credit (“On Book”) are on the roadmap.',
+    icon: 'profile',
+    fields: ['Customer name', 'Phone'],
   },
   credit: {
     title: 'Credit / On Book',
     description: 'Record credit and repayments without exposing customer information.',
-    fields: ['Customer', 'Amount', 'Reason or sale reference'],
-    submit: 'Review entry',
+    icon: 'receipt',
+    fields: ['Customer', 'Amount', 'Reason'],
   },
   insights: {
     title: 'Business insights',
-    description: 'Useful signals based on your own shop activity.',
+    description:
+      'Signals from your own shop activity — best sellers, quiet hours, demand near you.',
+    icon: 'trendUp',
     fields: [],
-    submit: 'Done',
+    live: {
+      label: 'View dashboard',
+      href: '/(merchant)',
+      detail: 'Today’s revenue, low stock and sync status are live now.',
+    },
   },
 };
 
 export default function ActionScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
-  const config = labels[slug] ?? {
+  const { session } = useAuth();
+  const flow = flows[slug] ?? {
     title: slug.replaceAll('-', ' '),
-    description: 'This flow is ready for backend connection.',
-    fields: ['Details'],
-    submit: 'Continue',
+    description: 'This part of Zviripo is not live yet.',
+    icon: 'info' as IconName,
+    fields: [],
   };
-  const [submitted, setSubmitted] = useState(false);
+
   return (
-    <SafeAreaView style={styles.safe}>
-      <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
-        <Pressable accessibilityRole="button" onPress={() => router.back()} style={styles.back}>
-          <Text style={styles.backText}>‹ Back</Text>
-        </Pressable>
-        <Text style={styles.eyebrow}>ZVIRIPO</Text>
-        <Text style={styles.title}>{config.title}</Text>
-        <Text style={styles.description}>{config.description}</Text>
-        {submitted ? (
-          <View style={styles.success}>
-            <Text style={styles.successMark}>✓</Text>
-            <Text style={styles.successTitle}>Saved on this device</Text>
-            <Text style={styles.successDetail}>
-              This demonstration flow is complete and ready to sync when the backend is connected.
-            </Text>
-            <Pressable onPress={() => router.back()} style={styles.primary}>
-              <Text style={styles.primaryText}>Done</Text>
-            </Pressable>
-          </View>
-        ) : (
-          <View style={styles.form}>
-            {config.fields.map((field, index) => (
-              <View key={field}>
-                <Text style={styles.label}>{field}</Text>
-                <TextInput
-                  accessibilityLabel={field}
-                  multiline={index === config.fields.length - 1 && config.fields.length > 1}
-                  placeholder={`Enter ${field.toLowerCase()}`}
-                  placeholderTextColor={colors.muted}
-                  style={[
-                    styles.input,
-                    index === config.fields.length - 1 &&
-                      config.fields.length > 1 &&
-                      styles.multiline,
-                  ]}
-                />
+    <Screen>
+      <IconButton accessibilityLabel="Back" icon="back" onPress={() => router.back()} />
+      <Row gap={spacing[3]} style={styles.heading}>
+        <View style={styles.iconWrap}>
+          <Icon color={colors.brand.forestDeep} name={flow.icon} size={24} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text role="headingXl">{flow.title}</Text>
+        </View>
+      </Row>
+      <Text role="body" tone="muted" style={styles.description}>
+        {flow.description}
+      </Text>
+
+      {flow.live ? (
+        <Card style={styles.block} tone="tint">
+          <Text role="label" tone="brand">
+            LIVE NOW
+          </Text>
+          <Text role="bodySm" style={{ marginTop: spacing[1] }}>
+            {flow.live.detail}
+          </Text>
+          <Button
+            label={flow.live.label}
+            onPress={() =>
+              router.push(
+                (session || !flow.live?.href.startsWith('/(merchant)')
+                  ? flow.live!.href
+                  : '/(auth)/sign-in') as never,
+              )
+            }
+            style={{ marginTop: spacing[3] }}
+          />
+        </Card>
+      ) : null}
+
+      {flow.fields.length > 0 ? (
+        <>
+          <Card style={[styles.block, styles.notice]}>
+            <Row gap={spacing[2]}>
+              <Icon color={colors.warning} name="info" size={18} />
+              <View style={{ flex: 1 }}>
+                <Text role="headingSm" tone="warning">
+                  {copy.comingSoon.label}
+                </Text>
+                <Text role="bodySm" tone="muted">
+                  {copy.comingSoon.detail} This is a preview of the flow.
+                </Text>
               </View>
+            </Row>
+          </Card>
+          <View style={styles.form}>
+            {flow.fields.map((field, index) => (
+              <Input
+                editable={false}
+                key={field}
+                label={field}
+                multiline={index === flow.fields.length - 1}
+                placeholder="Preview only"
+              />
             ))}
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => setSubmitted(true)}
-              style={styles.primary}
-            >
-              <Text style={styles.primaryText}>{config.submit}</Text>
-            </Pressable>
+            <Button disabled fullWidth label="Not available yet" size="lg" />
           </View>
-        )}
-      </ScrollView>
-    </SafeAreaView>
+        </>
+      ) : null}
+
+      {!flow.live && flow.fields.length === 0 ? (
+        <Card style={[styles.block, styles.notice]}>
+          <Text role="headingSm" tone="warning">
+            {copy.comingSoon.label}
+          </Text>
+          <Text role="bodySm" tone="muted">
+            {copy.comingSoon.detail}
+          </Text>
+        </Card>
+      ) : null}
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.canvas },
-  page: { padding: spacing[5], paddingBottom: spacing[12] },
-  back: { minHeight: 44, alignSelf: 'flex-start', justifyContent: 'center' },
-  backText: { color: colors.brand[700], fontWeight: '900' },
-  eyebrow: {
-    marginTop: spacing[5],
-    color: colors.brand[700],
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1.4,
-  },
-  title: {
-    marginTop: spacing[2],
-    color: colors.ink,
-    fontSize: typography.size.display,
-    lineHeight: typography.lineHeight.display,
-    fontWeight: '900',
-    textTransform: 'capitalize',
-  },
-  description: {
-    marginTop: spacing[3],
-    color: colors.muted,
-    fontSize: typography.size.body,
-    lineHeight: typography.lineHeight.body,
-  },
-  form: { marginTop: spacing[8], gap: spacing[4] },
-  label: { marginBottom: spacing[2], color: colors.ink, fontSize: 12, fontWeight: '800' },
-  input: {
-    minHeight: 54,
-    paddingHorizontal: spacing[4],
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.medium,
-    backgroundColor: colors.surface,
-    color: colors.ink,
-  },
-  multiline: { minHeight: 110, paddingTop: spacing[4], textAlignVertical: 'top' },
-  primary: {
-    minHeight: 54,
-    marginTop: spacing[3],
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radii.medium,
-    backgroundColor: colors.brand[700],
-  },
-  primaryText: { color: colors.surface, fontWeight: '900' },
-  success: {
-    marginTop: spacing[8],
-    padding: spacing[6],
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.large,
-    backgroundColor: colors.surface,
-  },
-  successMark: {
+  heading: { marginTop: spacing[5] },
+  iconWrap: {
     width: 52,
     height: 52,
-    paddingTop: 10,
-    color: colors.success,
-    textAlign: 'center',
-    borderRadius: radii.pill,
-    backgroundColor: colors.brand[100],
-    fontSize: 22,
-    fontWeight: '900',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    backgroundColor: colors.brand.tint,
   },
-  successTitle: {
-    marginTop: spacing[5],
-    color: colors.ink,
-    fontSize: typography.size.title,
-    fontWeight: '900',
-  },
-  successDetail: {
-    marginTop: spacing[2],
-    color: colors.muted,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
+  description: { marginTop: spacing[3] },
+  block: { marginTop: spacing[5] },
+  notice: { borderColor: colors.gold[100], backgroundColor: colors.warningSoft },
+  form: { marginTop: spacing[4], gap: spacing[4] },
 });
