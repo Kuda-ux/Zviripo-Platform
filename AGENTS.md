@@ -30,6 +30,35 @@ The core loop is inventory → marketplace publication → local discovery → s
 - SQLite is the immediate source for offline merchant transactions; Supabase is authoritative after idempotent synchronization.
 - Shared TypeScript types, validation, UI tokens, and domain logic belong in packages.
 
+## Frontend and design system
+
+- `ZVIRIPO_DESIGN.md` is the design source of truth; `packages/ui` is its implementation. Do not create per-app styling systems or hardcode hex values in screens — consume tokens.
+- Use typography **roles** (`text.headingMd`, `text.numeric`) not raw font sizes. Financial figures use `numeric*` roles.
+- Spacing only from the scale. Radii only `sm/md/lg/xl/pill`.
+- Icons come from the shared `icons` map (Ionicons). No emoji in UI.
+- Screens compose domain components; break screens over ~300 lines into components.
+- Every data screen ships loading (skeleton), empty (with next action), error (human copy + data-safety + retry) and, where relevant, offline states.
+- Map technical errors through `humanizeError`; never render `error.message` from PostgREST/Auth directly.
+- Local vs server state must be explicit in POS, inventory, sync and receipts.
+- Minimum touch target 48; never colour-only meaning; label every icon-only control; respect reduced motion.
+- Web: App Router, server components by default, client components only for interaction; URL params for search/filter state; per-page metadata.
+- Lists that can exceed ~50 items use `FlatList`/virtualization.
+
+## Logo rules
+
+- Use the exact supplied logo raster. Never redraw, approximate, recreate in CSS, recolour or add effects.
+- Derivatives in `packages/ui/brand/` are resize/crop only. Place the logo only on `brand.night` surfaces (its backdrop is opaque). Use the typographic `Wordmark` on light surfaces until a transparent master is supplied.
+
+## Data-access rules
+
+- All Supabase access goes through `packages/database`. No `supabase.from(...)` in UI code.
+- Shared formatting (`formatMoney`) and ids (`newOperationId`) come from `@comodities/utils`; do not re-implement.
+- Do not duplicate business logic across mobile/web/admin unless platform differences require it.
+
+## Visual QA rules
+
+TypeScript passing is not done. For each redesigned screen: run it, open the route, check mobile and desktop sizes, loading/empty/error/offline states, keyboard access on web, touch targets, spacing, hierarchy and brand consistency. Fix what you find. Report what changed, why, files, decisions, tests, remaining issues.
+
 ## Definition of done
 
 Include relevant loading, empty, error, success, accessibility, offline, validation, authorization, analytics, test, performance, security, and monitoring behavior. For financial/inventory work also include idempotency, consistency, crash recovery, duplicate sync testing, offline testing, and reconciliation.

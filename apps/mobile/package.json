@@ -13,7 +13,10 @@
   "dependencies": {
     "@comodities/database": "workspace:*",
     "@comodities/ui": "workspace:*",
+    "@expo/vector-icons": "15.1.1",
     "expo": "57.0.22",
+    "expo-haptics": "57.0.3",
+    "expo-network": "57.0.2",
     "expo-router": "57.0.21",
     "expo-sqlite": "^57.0.3",
     "expo-status-bar": "57.0.1",
