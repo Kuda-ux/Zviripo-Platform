@@ -376,6 +376,14 @@ export interface Database {
       };
     };
     Functions: {
+      create_business: {
+        Args: {
+          business_name: string;
+          business_area?: string | null;
+          business_phone?: string | null;
+        };
+        Returns: Database['public']['Tables']['businesses']['Row'];
+      };
       is_business_creator: { Args: { target_business_id: string }; Returns: boolean };
       is_business_member: { Args: { target_business_id: string }; Returns: boolean };
       has_business_role: {

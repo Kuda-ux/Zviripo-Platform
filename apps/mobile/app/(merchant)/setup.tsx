@@ -31,7 +31,6 @@ export default function BusinessSetupScreen() {
       name: name.trim(),
       area: area.trim() || null,
       phone: phone.trim() || null,
-      status: 'active',
     });
 
     if (createError || !data) {

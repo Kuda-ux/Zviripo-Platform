@@ -38,26 +38,17 @@ export async function getBusinessesForProfile(client: TypedSupabaseClient, profi
 
 export async function createBusiness(
   client: TypedSupabaseClient,
-  business: Omit<Inserts<'businesses'>, 'created_by'>,
+  business: Pick<Inserts<'businesses'>, 'name'> &
+    Partial<Pick<Inserts<'businesses'>, 'area' | 'phone'>>,
 ) {
-  const { data: userData, error: userError } = await client.auth.getUser();
-  if (userError || !userData.user) return { data: null, error: userError };
-
   const { data, error } = await client
-    .from('businesses')
-    .insert({ ...business, created_by: userData.user.id })
-    .select()
+    .rpc('create_business', {
+      business_name: business.name,
+      business_area: business.area ?? null,
+      business_phone: business.phone ?? null,
+    })
     .single();
-  if (error || !data) return { data: null, error };
-
-  const { error: memberError } = await client.from('business_members').insert({
-    business_id: data.id,
-    profile_id: userData.user.id,
-    role: 'owner',
-  });
-  if (memberError) return { data: null, error: memberError };
-
-  return { data, error: null };
+  return { data, error };
 }
 
 export async function listBusinessProducts(client: TypedSupabaseClient, businessId: string) {
