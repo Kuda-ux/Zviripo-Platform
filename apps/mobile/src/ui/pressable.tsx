@@ -4,6 +4,7 @@ import {
   AccessibilityInfo,
   Animated,
   Pressable as RNPressable,
+  StyleSheet,
   type PressableProps,
   type StyleProp,
   type ViewStyle,
@@ -32,6 +33,44 @@ export interface PressProps extends Omit<PressableProps, 'style'> {
   feedback?: boolean;
 }
 
+/**
+ * Props that size or position the element inside its parent must live on the
+ * Pressable itself — it is the child the parent actually lays out. Everything
+ * else (visuals, padding, content layout) stays on the animated inner view so
+ * the press transform covers the whole rendered surface.
+ */
+const LAYOUT_KEYS = new Set([
+  'flex',
+  'flexGrow',
+  'flexShrink',
+  'flexBasis',
+  'alignSelf',
+  'width',
+  'height',
+  'minWidth',
+  'maxWidth',
+  'minHeight',
+  'maxHeight',
+  'aspectRatio',
+  'margin',
+  'marginTop',
+  'marginBottom',
+  'marginLeft',
+  'marginRight',
+  'marginHorizontal',
+  'marginVertical',
+  'marginStart',
+  'marginEnd',
+  'position',
+  'top',
+  'bottom',
+  'left',
+  'right',
+  'start',
+  'end',
+  'zIndex',
+]);
+
 /** Pressable with the Zviripo micro press response (scale 0.97, 120ms). */
 export function Press({ style, feedback = true, children, ...rest }: PressProps) {
   const scale = useRef(new Animated.Value(1)).current;
@@ -39,6 +78,17 @@ export function Press({ style, feedback = true, children, ...rest }: PressProps)
   const animate = (to: number) =>
     Animated.timing(scale, { toValue: to, duration: motion.micro, useNativeDriver: true }).start();
   const active = feedback && !reduce;
+
+  const flattened = StyleSheet.flatten(style) ?? {};
+  const outerStyle: ViewStyle = {};
+  const innerStyle: ViewStyle = {};
+  for (const key of Object.keys(flattened) as Array<keyof ViewStyle>) {
+    if (LAYOUT_KEYS.has(key)) {
+      (outerStyle as Record<string, unknown>)[key] = flattened[key];
+    } else {
+      (innerStyle as Record<string, unknown>)[key] = flattened[key];
+    }
+  }
 
   return (
     <RNPressable
@@ -51,10 +101,15 @@ export function Press({ style, feedback = true, children, ...rest }: PressProps)
         if (active) animate(1);
         rest.onPressOut?.(e);
       }}
+      style={outerStyle}
     >
-      <Animated.View style={[style, active ? { transform: [{ scale }] } : null]}>
+      <Animated.View style={[innerStyle, styles.fill, active ? { transform: [{ scale }] } : null]}>
         {children as React.ReactNode}
       </Animated.View>
     </RNPressable>
   );
 }
+
+const styles = StyleSheet.create({
+  fill: { flexGrow: 1, alignSelf: 'stretch' },
+});

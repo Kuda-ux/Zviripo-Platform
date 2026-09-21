@@ -2,13 +2,13 @@ import { colors, spacing } from '@comodities/ui';
 import type { PropsWithChildren, ReactNode } from 'react';
 import {
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   View,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export interface ScreenProps {
   footer?: ReactNode;

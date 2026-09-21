@@ -1,6 +1,7 @@
 import { colors, copy, spacing } from '@comodities/ui';
 import { router } from 'expo-router';
-import { SafeAreaView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Logo } from '../src/components/brand';
 import { useAuth } from '../src/lib/auth-context';
 import { Button } from '../src/ui/button';

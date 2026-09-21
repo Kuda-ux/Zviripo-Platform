@@ -2,7 +2,8 @@ import { getMarketplaceByBusiness, type MarketplaceListing } from '@comodities/d
 import { colors, radii, spacing } from '@comodities/ui';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Linking, SafeAreaView, ScrollView, Share, StyleSheet, View } from 'react-native';
+import { Linking, ScrollView, Share, StyleSheet, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Availability, Price, ProductCard, productTone } from '../../src/components/commerce';
 import { fetchMarketplaceListing } from '../../src/lib/marketplace';
 import { useSaved } from '../../src/lib/saved';

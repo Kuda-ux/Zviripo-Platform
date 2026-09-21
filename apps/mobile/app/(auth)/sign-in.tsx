@@ -3,14 +3,8 @@ import { colors, spacing } from '@comodities/ui';
 import { humanizeError } from '@comodities/utils';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Logo } from '../../src/components/brand';
 import { supabase } from '../../src/lib/supabase';
 import { Button } from '../../src/ui/button';
