@@ -8,11 +8,7 @@ import { isSupabaseConfigured, supabase } from '../lib/supabase';
 
 const tones = ['green', 'gold', 'blue', 'ink'];
 
-export default async function Home({
-  searchParams,
-}: {
-  searchParams: Promise<{ q?: string }>;
-}) {
+export default async function Home({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const { q } = await searchParams;
   const query = q?.trim() ?? '';
 

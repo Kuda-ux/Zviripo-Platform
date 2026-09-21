@@ -45,7 +45,9 @@ export async function GET() {
       .limit(8),
     adminSupabase
       .from('marketplace_listings')
-      .select('listing_id, product_name, business_name, available_quantity, price_minor, currency_code')
+      .select(
+        'listing_id, product_name, business_name, available_quantity, price_minor, currency_code',
+      )
       .order('created_at', { ascending: false })
       .limit(8),
   ]);

@@ -52,8 +52,7 @@ const descriptions: Record<string, string> = {
   Users: 'Registered profiles on the platform. Per-user controls require admin authentication.',
   Merchants:
     'Recently registered businesses. Verification and suspension actions require admin authentication.',
-  Listings:
-    'Newest products visible on the public marketplace, derived from merchant inventory.',
+  Listings: 'Newest products visible on the public marketplace, derived from merchant inventory.',
   Moderation:
     'Reported content and factual risk signals will be handled here with an auditable decision trail. No reports exist yet.',
   Verification:
