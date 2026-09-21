@@ -179,14 +179,14 @@ What a consumer sees per row: product name/description/brand, category, shop nam
 
 All Supabase access goes through typed repository functions (never raw queries in screens):
 
-| Module           | Exports                                                                                                                                                                                |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `index.ts`       | `createSupabaseClient` (session persistence on), all generated `Database` types                                                                                                        |
-| `server.ts`      | `createServiceClient` — service-role, no session (server-side only)                                                                                                                    |
-| `auth.ts`        | Sign up/in/out, session, OTP helpers                                                                                                                                                   |
-| `marketplace.ts` | `listMarketplace` (query/area/category/price filters, pagination), `getMarketplaceListing`, `getMarketplaceByBusiness`                                                                 |
-| `merchant.ts`    | `getBusinessesForProfile`, `createBusiness` (RPC), `createProduct` (+ initial stock), `updateStock`, `toggleListed`, `recordSale`, `getSales`, `getTodaySummary`, `getBusinessMembers` |
-| `device.ts`      | `registerDevice` — upserts device so sales can attach to it                                                                                                                            |
+| Module           | Exports                                                                                                                                                               |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `index.ts`       | `createSupabaseClient` (session persistence on), all generated `Database` types                                                                                       |
+| `server.ts`      | `createServiceClient` — service-role, no session (server-side only)                                                                                                   |
+| `auth.ts`        | Sign up/in/out, session, OTP helpers                                                                                                                                  |
+| `marketplace.ts` | `listMarketplace` (query/area/category/price filters, pagination), `getMarketplaceListing`, `getMarketplaceByBusiness`                                                |
+| `merchant.ts`    | `getBusinessesForProfile`, `createBusiness` (RPC), `listBusinessProducts`, `createProduct` (+ initial stock), `updateStock`, `toggleListed`, `recordSale`, `getSales` |
+| `device.ts`      | `registerDevice` — upserts device so sales can attach to it                                                                                                           |
 
 `recordSale` is idempotent: it checks `operation_id` first, so replaying a queued sale returns the existing row instead of duplicating.
 
@@ -199,30 +199,40 @@ Expo SDK 57 + Expo Router + React Native 0.86. One app serves both audiences via
 ### Route map
 
 ```
-/                    Welcome (brand screen → Explore / Business / Sign in)
-/(auth)/sign-in      Email sign-in + sign-up (same screen, toggle)
+/                    Welcome (brand lockup on night surface → Explore / Business / Sign in)
+/(auth)/sign-in      Email sign-in + sign-up (same screen, toggle, humanized errors)
 
 /(consumer)/         Tab bar: Home · Discover · Sell · Activity · You
-  index              Greeting, intent search, action grid, "Available near you",
-                     "Shops near you", "New on Zviripo", "Opportunities"
-  discover           Search + category filters; empty state → Post a request
-  create             Sell/Request entry points
+  index              Intent-first home: search, action grid, live "Available near you"
+                     listings, skeletons and honest empty/error states
+  discover           Search-as-heart: URL-seeded query, persisted recent searches,
+                     real listing results, request fallback on empty
+  create             Sell/Request/Offer-a-service entry points; unbuilt flows are
+                     clearly marked "Coming soon"
   activity           Notifications placeholder
-  profile            Real session identity, sign-out
+  profile            Real session identity, saved items, sign-out
+/product/[id]        Live listing detail: price, stock, seller card, call action
+                     when a phone is published, save toggle, request-similar link
+/action/[slug]       Honest placeholder flows — preview forms are disabled and
+                     explicitly say nothing is saved; flows that exist (sell,
+                     add stock, insights) deep-link to the live screen
 
 /(merchant)/         Tab bar: Business · Sell · Inventory · Activity · More
   index              Dashboard: today's revenue/txns/items, marketplace count,
-                     low-stock, Attention section (pending sync, restock, unlisted)
-  sell               POS: searchable product grid, tap-to-add cart, totals bar,
+                     low-stock, Attention cards (pending sync, restock, unlisted)
+  sell               POS: searchable inventory, quantity steppers capped at stock,
+                     payment-method chips (cash/mobile money/card/bank transfer),
                      confirm → queue locally → sync
-  inventory          Stock list, adjust quantities, "List on Zviripo" toggles
-  add-product        Name/price/SKU/initial stock/threshold
+  inventory          Stock list, inline restock stepper, "List on Zviripo" toggles
+  add-product        Name/price/currency chips/initial stock/marketplace toggle
   setup              Create business (→ create_business RPC)
-  more/activity      Settings shell, sales history
-
-/product/[id]        Listing detail with trust copy
-/action/[slug]       Request/Services placeholder flows
+  activity           Real sales feed grouped Today/Earlier from getSales
+  more               Real business card, tool links (live vs coming soon), sign-out
 ```
+
+### Shared UI layer
+
+`src/ui/` holds the primitives every screen composes — `Text` (typography roles), `Button`, `Input`, `Press` (micro-press feedback honoring reduced motion), `Card`/`Chip`/`Row`/`SectionHeader`/`IconButton`, and `Skeleton`/`EmptyState`/`ErrorState`. `src/components/` adds domain pieces: `SyncStatus` (connectivity-aware pill/card), `commerce.tsx` (`Price`, `Availability`, `ProductCard`, `ListingRow`), and `brand.tsx` lockups. `src/lib/connectivity.ts` wraps `expo-network` into a `useConnectivity` hook plus `useOnReconnect` for auto-sync.
 
 ### State and identity
 
@@ -244,10 +254,11 @@ Guarantees:
 
 - **A sale is never lost** — it hits SQLite before any network call; crash/reboot/offline all safe.
 - **No duplicates** — `operation_id` is the SQLite primary key _and_ the unique server key; replaying returns the existing sale.
-- **Visible state** — pending count surfaces as a "N to sync" pill on Sell and in the dashboard's Attention section; tapping retries.
-- **Honest UX** — success says "Sale recorded"; offline says "saved on this device, will sync automatically."
+- **Visible state** — the shared `SyncStatus` pill/card shows real connectivity (via `expo-network`) plus pending count on Sell, the dashboard and Activity; tapping retries.
+- **Auto-sync on reconnect** — a `useOnReconnect` listener in the root layout flushes the queue whenever connectivity returns, app-wide; individual screens also refresh their data.
+- **Honest UX** — success says "Sale recorded"; offline says "saved on this device, will sync automatically." Errors pass through `humanizeError` so network failures read as "You're offline", not stack traces.
 
-Known limits (roadmap): stock doesn't decrement locally while offline, no auto-sync on reconnect listener yet, no conflict resolution UI.
+Known limits (roadmap): stock doesn't decrement locally while offline, no conflict resolution UI, and `recordSale` still runs as sequential client calls — a transactional server-side RPC is the planned hardening step.
 
 ### Metro bundling notes
 
@@ -257,20 +268,23 @@ Known limits (roadmap): stock doesn't decrement locally while offline, no auto-s
 
 ## 7. The consumer web app — `apps/web`
 
-Next.js (App Router), deployed to Vercel.
+Next.js (App Router), deployed to Vercel. The storefront is **server-rendered** — listings are fetched on the server per request, so pages are crawlable and fast on cheap devices.
 
-- `/` — the storefront: hero with live search, quick links (Buy/Sell/Request/Services), a "Live near you" card showing a real listing, the **Near you** grid of real `marketplace_listings` rows (search, save ♡→♥, skeletons, honest empty/error states), a **Reverse marketplace** request section (examples labeled EXAMPLE), and a merchant pitch section (dashboard mock labeled EXAMPLE).
+- `/` — server component reading `?q=` from the URL: hero with a plain GET search form, quick links (Buy/Sell/Request/Services), a "Live near you" card with a real listing, the **Near you** grid of real `marketplace_listings` rows (each card links to its detail page), honest empty/error states, a **Reverse marketplace** request section (examples labeled EXAMPLE), and a merchant pitch section (dashboard mock labeled EXAMPLE).
+- `/product/[id]` — server-rendered listing detail with `generateMetadata`: price, live stock status, description/brand, seller card linking to the shop page, and a `tel:` call button when the business publishes a phone number.
+- `/business/[id]` — server-rendered shop page listing all live listings for that business, with `generateMetadata`.
 - `/sign-in` — email auth against the same Supabase project.
-- `components/auth-link.tsx` — session-aware nav (Sign in ↔ account state).
+- `components/auth-link.tsx` — session-aware nav (Sign in ↔ account state); `components/save-button.tsx` — the only client island on the listing grid, persisting saves to `localStorage`.
 
-It reads the same `listMarketplace` repository as mobile — one data source, two renderers.
+It reads the same `listMarketplace`/`getMarketplaceListing`/`getMarketplaceByBusiness` repositories as mobile — one data source, two renderers.
 
 ## 8. The admin app — `apps/admin`
 
 Next.js portal at `admin-six-mauve-79.vercel.app`.
 
 - Sidebar sections: Overview, Users, Merchants, Listings, Moderation, Verification, Sync health, Audit logs.
-- `/api/stats` — server route using the **service-role key** (server-only, never bundled to the client). Returns aggregate counts: merchants, live listings, sales today, sync failures.
+- `/api/stats` — server route using the **service-role key** (server-only, never bundled to the client). Returns aggregate counts (merchants, live listings, sales today, registered users, out-of-stock inventory, sync ops in flight and in conflict) plus the 8 most recent merchants and listings.
+- Section-aware panels: Merchants shows the real recent-business list with status badges, Listings shows newest marketplace rows, Sync health splits in-flight vs. conflict queues; Moderation, Verification and Audit logs state plainly that those queues don't exist yet.
 - Deliberately honest: shows "Live from Supabase" when configured, "Awaiting data connection" otherwise. Privileged admin actions are not yet built — the portal is metrics-first pending admin auth/roles.
 
 ---
@@ -281,8 +295,11 @@ Zviripo's visual language lives in tokens, consumed identically by RN and CSS:
 
 - **Palette** — deep forest greens (`#0a3527`→`#178d5f`), Zimbabwean gold accent (`#e8a020`), warm paper canvas (`#f5f4ef`), semantic success/warning/danger/info.
 - **Rule** — gold marks the _primary action_ on each screen (Sell now, Explore, Post a request).
-- **Type** — 12/16/22/34 scale; **radii** 8/14/22/pill; **spacing** 4-based scale to 64; **48px minimum touch targets**.
-- **Feedback copy** (`primitives.ts`) — a shared vocabulary for sync states: "Working offline / Sales are safe on this device", "Everything synced", "Action needed" — so every surface speaks the same honest language.
+- **Type** — a role scale (`display`/`headingXl…Sm`/`body`/`bodySm`/`caption`/`label`/`numeric*`) plus a legacy size map; **radii** 8/12/16/22/pill; **spacing** 4-based scale to 96; **48px minimum touch targets**.
+- **Iconography** (`icons.ts`) — a single named icon set mapped to Ionicons, so screens ask for `sync`, `lowStock`, `mobileMoney` rather than glyph names.
+- **Voice** (`copy.ts`) — shared product copy: sync states ("N sales waiting to sync", "Everything synced"), empty states per surface, error titles/details, and the "Coming soon — nothing here is saved" notice used by placeholder flows.
+- **Motion** (`motion` tokens) — 120ms micro-press, 200ms transitions; the `Press` primitive honors reduced-motion settings.
+- **Money formatting** — `formatMinor`/`formatMoney` in `@comodities/utils` render integer minor units identically on Hermes, Node and browsers (no `Intl` dependency).
 
 ---
 
@@ -314,6 +331,6 @@ Deployments: web → `web-swart-nine-57.vercel.app`, admin → `admin-six-mauve-
 
 ## 12. What's real vs. what's ahead
 
-**Working today, end-to-end:** auth → business creation → products + stock → publish to marketplace → public discovery on web + mobile → offline-safe POS sale → stock decrement → dashboard/admin metrics. Seeded with a realistic Mbare dataset.
+**Working today, end-to-end:** auth → business creation → products + stock → publish to marketplace → public discovery on web + mobile (searchable, server-rendered product and shop pages) → offline-safe POS sale with payment method → stock decrement → dashboard/admin metrics → auto-sync on reconnect. Seeded with a realistic Mbare dataset.
 
-**Honest gaps (roadmap):** requests economy (tables + responses), services/jobs, business storefront pages, admin authentication and privileged actions, local stock decrement while offline, auto-sync on reconnect, conflict resolution, messaging, receipts QR, verification flows, live pgTAP runs in CI.
+**Honest gaps (roadmap):** requests economy (tables + responses), services/jobs, admin authentication and privileged actions, local stock decrement while offline, conflict resolution, transactional server-side `record_sale` RPC (the current client performs sequential writes), messaging, receipts QR, verification flows, live pgTAP runs in CI, and a pending investigation into the `businesses` insert-policy mismatch that the `create_business` RPC works around.
