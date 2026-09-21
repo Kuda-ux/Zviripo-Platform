@@ -19,8 +19,78 @@ aside {
   color: #fff;
   background: #0a3527;
 }
-aside strong {
+.side-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.side-brand strong {
   font-size: 1.3rem;
+}
+.brand-mark {
+  border-radius: 8px;
+}
+.rows {
+  margin: 20px 0 0;
+  padding: 0;
+  max-width: 720px;
+  list-style: none;
+  border: 1px solid #e2e5dc;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.rows li {
+  padding: 13px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid #e2e5dc;
+}
+.rows li:last-child {
+  border-bottom: 0;
+}
+.rows li div {
+  display: grid;
+  gap: 3px;
+}
+.rows li strong {
+  font-size: 0.95rem;
+}
+.rows li span {
+  color: #54675c;
+  font-size: 0.78rem;
+}
+.rows li em {
+  color: #0d5f40;
+  font-style: normal;
+  font-weight: 800;
+  font-size: 0.9rem;
+}
+.status {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #eef6f1;
+  font-size: 0.72rem;
+  text-transform: capitalize;
+}
+.status-active {
+  color: #0f7a51;
+}
+.status-draft,
+.status-suspended {
+  color: #b77708;
+  background: #fbeed3;
+}
+.sync-grid {
+  margin-top: 20px;
+  max-width: 720px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.sync-grid article strong {
+  font-size: 1.6rem;
 }
 aside p {
   color: #8fb3a2;
